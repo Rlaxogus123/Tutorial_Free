@@ -1,0 +1,62 @@
+{
+	"geode": "5.7.1",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "tipp7.tutorial",
+	"name": "Process Difficulty",
+	"version": "v1.2.0",
+	"developer": "Tipp7",
+	"description": "Define level sections, rate their difficulty, and view shared progress layouts while playing.",
+	"links": {
+		"source": "https://github.com/Rlaxogus123/Tutorial_Free"
+	},
+	"tags": [
+		"gameplay",
+		"utility",
+		"interface"
+	],
+	"resources": {
+		"sprites": [
+			"resources/0.png",
+			"resources/1.png",
+			"resources/2.png",
+			"resources/3.png",
+			"resources/4.png",
+			"resources/5.png",
+			"resources/6.png",
+			"resources/7.png",
+			"resources/8.png",
+			"resources/9.png",
+			"resources/10.png",
+			"resources/11.png",
+			"resources/12.png",
+			"resources/13.png",
+			"resources/14.png",
+			"resources/15.png",
+			"resources/16.png",
+			"resources/17.png",
+			"resources/18.png",
+			"resources/19.png",
+			"resources/20.png",
+			"resources/21.png",
+			"resources/22.png",
+			"resources/23.png",
+			"resources/24.png",
+			"resources/25.png",
+			"resources/26.png",
+			"resources/27.png",
+			"resources/28.png",
+			"resources/29.png",
+			"resources/30.png",
+			"resources/31.png",
+			"resources/32.png",
+			"resources/fill.png",
+			"resources/bar.png",
+			"resources/Mark.png"
+		]
+	}
+}

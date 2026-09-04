@@ -1,0 +1,119 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "section-data": {
+      "$mapKey": {
+        ".read": true,
+        "$userKey": {
+          ".write": "$mapKey.beginsWith('map-') && $userKey.beginsWith('user-')",
+          ".validate": "!newData.exists() || (newData.hasChildren(['mapName', 'userName', 'sections', 'updatedAt']) && (newData.hasChildren(['playerIcon', 'playerColor1', 'playerColor2', 'playerGlow', 'playerGlowColor']) || (!newData.hasChild('playerIcon') && !newData.hasChild('playerColor1') && !newData.hasChild('playerColor2') && !newData.hasChild('playerGlow') && !newData.hasChild('playerGlowColor'))))",
+          "mapName": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100"
+          },
+          "userName": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "playerIcon": {
+            ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2000"
+          },
+          "playerColor1": {
+            ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 255"
+          },
+          "playerColor2": {
+            ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 255"
+          },
+          "playerGlow": {
+            ".validate": "newData.isBoolean()"
+          },
+          "playerGlowColor": {
+            ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 255"
+          },
+          "sections": {
+            ".validate": "newData.hasChildren()",
+            "$index": {
+              ".validate": "$index.matches(/^(0|[1-9]|[1-9][0-9]|[1-4][0-9][0-9])$/) && newData.hasChildren(['start', 'difficulty', 'partName', 'faces'])",
+              "start": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+              },
+              "difficulty": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 999"
+              },
+              "partName": {
+                ".validate": "newData.isString() && newData.val().length <= 96"
+              },
+              "faces": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 32"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "flagData": {
+            ".validate": "newData.hasChildren(['version'])",
+            "version": {
+              ".validate": "newData.isNumber() && newData.val() === 1"
+            },
+            "items": {
+              "$index": {
+                ".validate": "$index.matches(/^(0|[1-9]|[1-9][0-9])$/) && newData.hasChildren(['id', 'label', 'percent', 'source', 'icon', 'color', 'offsetX', 'offsetY', 'scale', 'opacity'])",
+                "id": {
+                  ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
+                },
+                "label": {
+                  ".validate": "newData.isString() && newData.val().length <= 48"
+                },
+                "percent": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+                },
+                "source": {
+                  ".validate": "newData.isString() && (newData.val() === 'fixed' || newData.val() === 'best')"
+                },
+                "icon": {
+                  ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
+                },
+                "color": {
+                  ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 16777215"
+                },
+                "offsetX": {
+                  ".validate": "newData.isNumber() && newData.val() >= -30 && newData.val() <= 30"
+                },
+                "offsetY": {
+                  ".validate": "newData.isNumber() && newData.val() >= -30 && newData.val() <= 30"
+                },
+                "scale": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0.5 && newData.val() <= 2"
+                },
+                "opacity": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "map-index": {
+      ".read": true,
+      "$mapKey": {
+        "$userKey": {
+          ".write": "$mapKey.beginsWith('map-') && $userKey.beginsWith('user-')",
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 100)"
+        }
+      }
+    }
+  }
+}
