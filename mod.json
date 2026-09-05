@@ -8,11 +8,15 @@
 	},
 	"id": "tipp7.tutorial",
 	"name": "Process Difficulty",
-	"version": "v1.2.0",
+	"version": "v1.2.1",
 	"developer": "Tipp7",
 	"description": "Define level sections, rate their difficulty, and view shared progress layouts while playing.",
 	"links": {
 		"source": "https://github.com/Rlaxogus123/Tutorial_Free"
+	},
+	"issues": {
+		"info": "Report bugs on the public GitHub issue tracker.",
+		"url": "https://github.com/Rlaxogus123/Tutorial_Free/issues"
 	},
 	"tags": [
 		"gameplay",

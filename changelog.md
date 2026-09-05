@@ -1,3 +1,10 @@
+# 1.2.1
+
+- Add explicit confirmation listing all data shared by a public server upload.
+- Remove inactive membership-only editor implementations from the free source.
+- Replace member-only flag controls with a compact read-only presentation.
+- Add namespaced node IDs and a public issue tracker.
+
 # 1.2.0
 
 - Add per-map FlagData alongside SectionData.

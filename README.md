@@ -10,9 +10,16 @@ features as the membership distribution. The membership benefit is additional
 visual-element customization: custom flag text, percentage source, icons,
 colors, detail controls, and progress-HUD appearance settings.
 
-The free distribution can view shared FlagData and edit fixed percentages.
-Controls reserved for membership are visibly locked and show an explanatory
-message when selected.
+The free distribution can view shared FlagData and edit fixed percentages. Its
+settings button briefly explains which appearance controls belong to the
+membership distribution; inactive member-only editors are not included here.
+
+## Online sharing and privacy
+
+Server sharing is optional. Nothing is uploaded until the user selects Upload
+and confirms the public fields: Geometry Dash username, map name, icon colors,
+SectionData, and FlagData. Cancel keeps the preset local. The uploader can also
+delete the public copy from the same screen.
 
 ## Data compatibility
 

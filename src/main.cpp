@@ -12,8 +12,6 @@
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/ui/GeodeUI.hpp>
 #include <Geode/utils/web.hpp>
-#include <Geode/binding/Slider.hpp>
-#include <Geode/binding/SliderThumb.hpp>
 
 #include "FirebaseConfig.hpp"
 
@@ -117,20 +115,6 @@ static void showTipp7MembershipNotice() {
         "Additional customization is available only to Tipp7 membership users.",
         "OK"
     )->show();
-}
-
-static void setHalfOpacity(CCNode* node) {
-    if (!node) return;
-
-    if (auto rgba = typeinfo_cast<CCRGBAProtocol*>(node)) {
-        rgba->setCascadeOpacityEnabled(true);
-        rgba->setOpacity(128);
-        return;
-    }
-
-    for (auto child : node->getChildrenExt()) {
-        setHalfOpacity(child);
-    }
 }
 
 class FaceSelectPopup;
@@ -3122,8 +3106,7 @@ protected:
 
     static CCNode* createColorSwatch(
         ccColor3B color,
-        float size,
-        CCLayerColor** fillOutput = nullptr
+        float size
     ) {
         auto holder = CCNode::create();
         holder->setContentSize({size, size});
@@ -3143,7 +3126,6 @@ protected:
         );
         fill->setPosition({2.5f, 2.5f});
         holder->addChild(fill);
-        if (fillOutput) *fillOutput = fill;
         return holder;
     }
 
@@ -3164,26 +3146,20 @@ protected:
         normalLabel->setPosition({25.f, 225.f});
         m_mainLayer->addChild(normalLabel);
 
-        auto normalColorButton = CCMenuItemSpriteExtra::create(
-            createColorSwatch(
-                getNormalProgressColor(),
-                28.f
-            ),
-            this,
-            menu_selector(FlagDataListPopup::onPickNormalColor)
+        auto normalColorSwatch = createColorSwatch(
+            getNormalProgressColor(),
+            28.f
         );
-        normalColorButton->setPosition({145.f, 225.f});
-        m_buttonMenu->addChild(normalColorButton);
+        normalColorSwatch->setPosition({145.f, 225.f});
+        m_mainLayer->addChild(normalColorSwatch);
 
-        auto addSprite = ButtonSprite::create("Add Flag");
-        addSprite->setScale(0.5f);
-        auto addButton = CCMenuItemSpriteExtra::create(
-            addSprite,
-            this,
-            menu_selector(FlagDataListPopup::onAdd)
+        auto freeEditionLabel = CCLabelBMFont::create(
+            "Fixed percentages are editable",
+            "goldFont.fnt"
         );
-        addButton->setPosition({365.f, 225.f});
-        m_buttonMenu->addChild(addButton);
+        freeEditionLabel->setScale(0.32f);
+        freeEditionLabel->setPosition({330.f, 225.f});
+        m_mainLayer->addChild(freeEditionLabel);
 
         m_scroll = ScrollLayer::create({420.f, 165.f});
         m_scroll->setStealingTouches(true);
@@ -3232,26 +3208,13 @@ protected:
             return;
         }
 
-        auto menu = CCMenu::create();
-        menu->setContentSize({420.f, contentHeight});
-        menu->setAnchorPoint({0.f, 0.f});
-        menu->ignoreAnchorPointForPosition(false);
-        menu->setPosition({0.f, 0.f});
-        m_scroll->m_contentLayer->addChild(menu);
-
         auto y = contentHeight - 22.f;
         for (int index = 0; index < static_cast<int>(m_flags.size()); index++) {
             auto const& flag = m_flags[index];
 
             if (auto icon = createFlagIconSprite(flag.iconFrame, 24.f)) {
-                auto iconButton = CCMenuItemSpriteExtra::create(
-                    icon,
-                    this,
-                    menu_selector(FlagDataListPopup::onPickIcon)
-                );
-                iconButton->setTag(index);
-                iconButton->setPosition({24.f, y});
-                menu->addChild(iconButton);
+                icon->setPosition({24.f, y});
+                m_scroll->m_contentLayer->addChild(icon);
             }
 
             auto const id = flag.id;
@@ -3263,18 +3226,6 @@ protected:
             nameInput->setPosition({112.f, y});
             nameInput->setEnabled(false);
             m_scroll->m_contentLayer->addChild(nameInput);
-
-            auto nameHitbox = CCNode::create();
-            nameHitbox->setContentSize({105.f, 22.f});
-            nameHitbox->setAnchorPoint({0.5f, 0.5f});
-            nameHitbox->ignoreAnchorPointForPosition(false);
-            auto nameButton = CCMenuItemSpriteExtra::create(
-                nameHitbox,
-                this,
-                menu_selector(FlagDataListPopup::onLockedCustomization)
-            );
-            nameButton->setPosition({112.f, y});
-            menu->addChild(nameButton);
 
             auto percentInput = TextInput::create(65.f, "0~100");
             percentInput->setCommonFilter(CommonFilter::Float);
@@ -3304,57 +3255,28 @@ protected:
             });
             m_scroll->m_contentLayer->addChild(percentInput);
 
-            auto pbToggle = CCMenuItemToggler::createWithStandardSprites(
-                this,
-                menu_selector(FlagDataListPopup::onTogglePersonalBest),
-                0.45f
-            );
-            pbToggle->toggle(
+            auto pbSprite = CCSprite::createWithSpriteFrameName(
                 flag.source == FlagPercentSource::PersonalBest
+                    ? "GJ_checkOn_001.png"
+                    : "GJ_checkOff_001.png"
             );
-            pbToggle->m_notClickable = true;
-            pbToggle->setTag(index);
-            pbToggle->setPosition({230.f, y});
-            menu->addChild(pbToggle);
+            if (pbSprite) {
+                pbSprite->setScale(0.45f);
+                pbSprite->setPosition({230.f, y});
+                m_scroll->m_contentLayer->addChild(pbSprite);
+            }
 
             auto pbLabel = CCLabelBMFont::create("PB", "bigFont.fnt");
             pbLabel->setScale(0.22f);
             pbLabel->setPosition({248.f, y});
             m_scroll->m_contentLayer->addChild(pbLabel);
 
-            auto colorButton = CCMenuItemSpriteExtra::create(
-                createColorSwatch(
-                    unpackProgressColor(flag.passedColor),
-                    22.f
-                ),
-                this,
-                menu_selector(FlagDataListPopup::onPickFlagColor)
+            auto colorSwatch = createColorSwatch(
+                unpackProgressColor(flag.passedColor),
+                22.f
             );
-            colorButton->setTag(index);
-            colorButton->setPosition({274.f, y});
-            menu->addChild(colorButton);
-
-            auto editSprite = ButtonSprite::create("Detail");
-            editSprite->setScale(0.36f);
-            auto editButton = CCMenuItemSpriteExtra::create(
-                editSprite,
-                this,
-                menu_selector(FlagDataListPopup::onDetail)
-            );
-            editButton->setTag(index);
-            editButton->setPosition({330.f, y});
-            menu->addChild(editButton);
-
-            auto deleteSprite = ButtonSprite::create("X");
-            deleteSprite->setScale(0.42f);
-            auto deleteButton = CCMenuItemSpriteExtra::create(
-                deleteSprite,
-                this,
-                menu_selector(FlagDataListPopup::onDelete)
-            );
-            deleteButton->setTag(index);
-            deleteButton->setPosition({397.f, y});
-            menu->addChild(deleteButton);
+            colorSwatch->setPosition({274.f, y});
+            m_scroll->m_contentLayer->addChild(colorSwatch);
 
             y -= 42.f;
         }
@@ -3368,38 +3290,6 @@ protected:
         else {
             m_scroll->moveToTop();
         }
-    }
-
-    void onPickNormalColor(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onLockedCustomization(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onAdd(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onPickIcon(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onTogglePersonalBest(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onPickFlagColor(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onDetail(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onDelete(CCObject*) {
-        showTipp7MembershipNotice();
     }
 
 public:
@@ -3556,6 +3446,12 @@ public:
 
 class DownloadMenu : public geode::Popup, public FLAlertLayerProtocol {
 protected:
+    enum class PendingConfirmation {
+        None,
+        Upload,
+        Delete,
+    };
+
     WeakRef<SectionListPopup> m_parent;
     std::string m_databaseUrl;
     std::string m_mapName;
@@ -3566,6 +3462,7 @@ protected:
     ScrollLayer* m_scroll = nullptr;
     CCLabelBMFont* m_statusLabel = nullptr;
     bool m_requestInFlight = false;
+    PendingConfirmation m_pendingConfirmation = PendingConfirmation::None;
 
     std::string getMapEndpoint() const {
         return fmt::format(
@@ -4048,6 +3945,32 @@ protected:
             return;
         }
 
+        m_pendingConfirmation = PendingConfirmation::Upload;
+        FLAlertLayer::create(
+            this,
+            "Share Preset Online",
+            "Upload your <cy>GD username</c>, <cg>map name</c>, icon colors, "
+            "SectionData, and FlagData to the public preset database? "
+            "Anyone can view and download it. Cancel to keep the data local.",
+            "Cancel",
+            "Upload"
+        )->show();
+    }
+
+    void uploadOwnPreset() {
+        if (m_requestInFlight || !m_canManageCurrentMap) return;
+
+        auto userName = getLoggedInGDUsername();
+        auto parent = m_parent.lock();
+        if (userName.empty() || !parent || parent->getSections().empty()) {
+            return;
+        }
+
+        auto flags = loadFlags();
+        if (parent->getSections().size() > 500 || flags.size() > 100) {
+            return;
+        }
+
         auto body = matjson::Value::object();
         body["mapName"] = m_mapName;
         body["userName"] = userName;
@@ -4130,6 +4053,7 @@ protected:
             return;
         }
 
+        m_pendingConfirmation = PendingConfirmation::Delete;
         FLAlertLayer::create(
             this,
             "Delete Server Data",
@@ -4186,7 +4110,16 @@ protected:
     }
 
     void FLAlert_Clicked(FLAlertLayer*, bool btn2) override {
-        if (btn2) deleteOwnPreset();
+        auto const confirmation = m_pendingConfirmation;
+        m_pendingConfirmation = PendingConfirmation::None;
+        if (!btn2) return;
+
+        if (confirmation == PendingConfirmation::Upload) {
+            uploadOwnPreset();
+        }
+        else if (confirmation == PendingConfirmation::Delete) {
+            deleteOwnPreset();
+        }
     }
 
 public:
@@ -5464,7 +5397,7 @@ static void syncActiveSectionProgressBar(
         return;
     }
 
-    auto node = playLayer->getChildByID("section-progress-bar");
+    auto node = playLayer->getChildByID("section-progress-bar"_spr);
 
     if (node) {
         auto progressBar = typeinfo_cast<SectionProgressBar*>(node);
@@ -5483,7 +5416,7 @@ static void syncActiveSectionProgressBar(
     }
 
     bar->setZOrder(99999);
-    bar->setID("section-progress-bar");
+    bar->setID("section-progress-bar"_spr);
     playLayer->addChild(bar);
     bar->update(0.f);
 }
@@ -5494,10 +5427,10 @@ static void syncActiveFlagProgressBar(
     auto playLayer = PlayLayer::get();
     if (!playLayer) return;
 
-    auto node = playLayer->getChildByID("section-progress-bar");
+    auto node = playLayer->getChildByID("section-progress-bar"_spr);
     if (!node) {
         syncActiveSectionProgressBar(loadSections());
-        node = playLayer->getChildByID("section-progress-bar");
+        node = playLayer->getChildByID("section-progress-bar"_spr);
     }
     if (!node) return;
 
@@ -5509,875 +5442,10 @@ static void syncActiveFlagProgressBar(
     progressBar->setFlags(flags);
 }
 
-class ProgressCustomizationPopup : public geode::Popup {
-protected:
-    static constexpr int PAGE_COUNT = 6;
-
-    WeakRef<SectionListPopup> m_parent;
-    int m_page = 0;
-    bool m_hudEnabled = true;
-    bool m_showFlags = true;
-    bool m_showDifficulty = true;
-    bool m_showLabel = true;
-    bool m_showTotalPercent = true;
-    bool m_showPartPercent = true;
-    bool m_showPartIndex = true;
-    int m_percentDecimalPlaces = DEFAULT_PERCENT_DECIMAL_PLACES;
-
-    float m_hudScale = 1.f;
-    float m_hudOffsetX = 0.f;
-    float m_hudOffsetY = 0.f;
-    float m_hudOpacity = 1.f;
-    float m_difficultyFontScale = 1.f;
-    float m_difficultyFontOffsetX = 0.f;
-    float m_difficultyFontOffsetY = 0.f;
-    float m_difficultyFaceScale = 1.f;
-    float m_difficultyFaceOffsetX = 0.f;
-    float m_difficultyFaceOffsetY = 0.f;
-    float m_partNameScale = 1.f;
-    float m_partNameOffsetX = 0.f;
-    float m_partNameOffsetY = 0.f;
-    size_t m_difficultyFontIndex = 0;
-    size_t m_partNameFontIndex = 0;
-
-    CCNode* m_pageContent = nullptr;
-    CCMenu* m_pageMenu = nullptr;
-    CCLabelBMFont* m_pageLabel = nullptr;
-    CCMenuItemSpriteExtra* m_hudEnabledButton = nullptr;
-    CCLabelBMFont* m_decimalPlacesValueLabel = nullptr;
-    CCLabelBMFont* m_scaleValueLabel = nullptr;
-    CCLabelBMFont* m_offsetXValueLabel = nullptr;
-    CCLabelBMFont* m_offsetYValueLabel = nullptr;
-    CCLabelBMFont* m_opacityValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFontScaleValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFontOffsetXValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFontOffsetYValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFaceScaleValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFaceOffsetXValueLabel = nullptr;
-    CCLabelBMFont* m_difficultyFaceOffsetYValueLabel = nullptr;
-    CCLabelBMFont* m_partNameScaleValueLabel = nullptr;
-    CCLabelBMFont* m_partNameOffsetXValueLabel = nullptr;
-    CCLabelBMFont* m_partNameOffsetYValueLabel = nullptr;
-    CCLabelBMFont* m_fontNameLabel = nullptr;
-    CCLabelBMFont* m_fontPreviewLabel = nullptr;
-
-    bool init(SectionListPopup* parent) {
-        if (!Popup::init(390.f, 290.f)) {
-            return false;
-        }
-
-        m_parent = parent;
-        this->setTitle("Progress Settings");
-        loadSettings();
-        createNavigation();
-        showPage();
-        return true;
-    }
-
-    void loadSettings() {
-        m_hudEnabled = isProgressHUDEnabled();
-        m_showFlags = isFlagHUDEnabled();
-        m_showDifficulty = isDifficultyHUDEnabled();
-        m_showLabel = isLabelHUDEnabled();
-        m_showTotalPercent = isTotalPercentHUDEnabled();
-        m_showPartPercent = isPartPercentHUDEnabled();
-        m_showPartIndex = isPartIndexHUDEnabled();
-        m_percentDecimalPlaces = getPercentDecimalPlaces();
-        m_hudScale = getProgressHUDScale();
-        m_hudOffsetX = getProgressHUDOffsetX();
-        m_hudOffsetY = getProgressHUDOffsetY();
-        m_hudOpacity = getProgressHUDOpacity();
-        m_difficultyFontScale = getDifficultyFontScale();
-        m_difficultyFontOffsetX = getDifficultyFontOffsetX();
-        m_difficultyFontOffsetY = getDifficultyFontOffsetY();
-        m_difficultyFaceScale = getDifficultyFaceScale();
-        m_difficultyFaceOffsetX = getDifficultyFaceOffsetX();
-        m_difficultyFaceOffsetY = getDifficultyFaceOffsetY();
-        m_partNameScale = getPartNameScale();
-        m_partNameOffsetX = getPartNameOffsetX();
-        m_partNameOffsetY = getPartNameOffsetY();
-        m_difficultyFontIndex = difficultyFontIndex(
-            getDifficultyHUDFont()
-        );
-        m_partNameFontIndex = difficultyFontIndex(
-            getPartNameHUDFont()
-        );
-    }
-
-    void createNavigation() {
-        auto leftSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        auto rightSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        if (leftSprite && rightSprite) {
-            leftSprite->setScale(0.5f);
-            rightSprite->setScale(0.5f);
-            rightSprite->setFlipX(true);
-
-            auto leftButton = CCMenuItemSpriteExtra::create(
-                leftSprite,
-                this,
-                menu_selector(ProgressCustomizationPopup::onChangePage)
-            );
-            auto rightButton = CCMenuItemSpriteExtra::create(
-                rightSprite,
-                this,
-                menu_selector(ProgressCustomizationPopup::onChangePage)
-            );
-            leftButton->setTag(-1);
-            rightButton->setTag(1);
-            leftButton->setPosition({145.f, 22.f});
-            rightButton->setPosition({245.f, 22.f});
-            m_buttonMenu->addChild(leftButton);
-            m_buttonMenu->addChild(rightButton);
-        }
-
-        m_pageLabel = CCLabelBMFont::create(
-            fmt::format("1 / {}", PAGE_COUNT).c_str(),
-            "goldFont.fnt"
-        );
-        m_pageLabel->setScale(0.58f);
-        m_pageLabel->setPosition({195.f, 22.f});
-        m_mainLayer->addChild(m_pageLabel);
-
-        auto resetSprite = ButtonSprite::create("Reset All");
-        resetSprite->setScale(0.65f);
-        auto resetButton = CCMenuItemSpriteExtra::create(
-            resetSprite,
-            this,
-            menu_selector(ProgressCustomizationPopup::onReset)
-        );
-        resetButton->setPosition({330.f, 255.f});
-        setHalfOpacity(resetButton->getNormalImage());
-        m_buttonMenu->addChild(resetButton);
-
-        auto visibilityLabel = CCLabelBMFont::create(
-            "Show Progress",
-            "bigFont.fnt"
-        );
-        visibilityLabel->setScale(0.3f);
-        visibilityLabel->setAnchorPoint({1.f, 0.5f});
-        visibilityLabel->setPosition({96.f, 22.f});
-        m_mainLayer->addChild(visibilityLabel);
-
-        auto visibilitySprite = CCSprite::createWithSpriteFrameName(
-            m_hudEnabled
-                ? "GJ_checkOn_001.png"
-                : "GJ_checkOff_001.png"
-        );
-        if (visibilitySprite) {
-            visibilitySprite->setScale(0.68f);
-            m_hudEnabledButton = CCMenuItemSpriteExtra::create(
-                visibilitySprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onCheckClicked
-                )
-            );
-            m_hudEnabledButton->setTag(8);
-            m_hudEnabledButton->setPosition({119.f, 22.f});
-            m_buttonMenu->addChild(m_hudEnabledButton);
-        }
-    }
-
-    void createPageHeader(char const* text) {
-        auto label = CCLabelBMFont::create(text, "goldFont.fnt");
-        label->setScale(0.76f);
-        label->setPosition({195.f, 238.f});
-        m_pageContent->addChild(label);
-    }
-
-    void createCheckRow(
-        char const* text,
-        int tag,
-        float y,
-        bool checked
-    ) {
-        auto label = CCLabelBMFont::create(text, "bigFont.fnt");
-        label->setScale(0.42f);
-        label->setAnchorPoint({0.f, 0.5f});
-        label->setPosition({35.f, y});
-        m_pageContent->addChild(label);
-
-        auto checkSprite = CCSprite::createWithSpriteFrameName(
-            checked
-                ? "GJ_checkOn_001.png"
-                : "GJ_checkOff_001.png"
-        );
-
-        if (!checkSprite) {
-            log::error("Failed to create checkbox sprite");
-            return;
-        }
-
-        checkSprite->setScale(0.82f);
-        auto button = CCMenuItemSpriteExtra::create(
-            checkSprite,
-            this,
-            menu_selector(ProgressCustomizationPopup::onCheckClicked)
-        );
-        button->setTag(tag);
-        button->setPosition({350.f, y});
-        setHalfOpacity(button->getNormalImage());
-        m_pageMenu->addChild(button);
-    }
-
-    void createSliderRow(
-        char const* text,
-        int tag,
-        float y,
-        float value,
-        float minimum,
-        float maximum,
-        CCLabelBMFont** outputValueLabel
-    ) {
-        auto label = CCLabelBMFont::create(text, "bigFont.fnt");
-        label->setScale(0.38f);
-        label->setAnchorPoint({0.f, 0.5f});
-        label->setPosition({38.f, y});
-        m_pageContent->addChild(label);
-
-        auto slider = Slider::create(
-            this,
-            menu_selector(ProgressCustomizationPopup::onLockedSlider),
-            0.9f
-        );
-        if (slider) {
-            slider->setPosition({225.f, y});
-            slider->setValue(std::clamp(
-                (value - minimum) / (maximum - minimum),
-                0.f,
-                1.f
-            ));
-            slider->setLiveDragging(false);
-            if (auto thumb = slider->getThumb()) {
-                thumb->setTag(tag);
-            }
-            setHalfOpacity(slider);
-            m_pageContent->addChild(slider);
-        }
-
-        auto valueLabel = CCLabelBMFont::create("", "goldFont.fnt");
-        valueLabel->setScale(0.59f);
-        valueLabel->setAnchorPoint({1.f, 0.5f});
-        valueLabel->setPosition({364.f, y});
-        m_pageContent->addChild(valueLabel);
-        *outputValueLabel = valueLabel;
-        updateSliderValueLabel(tag);
-    }
-
-    void updateDecimalPlacesRow() {
-        if (!m_decimalPlacesValueLabel) {
-            return;
-        }
-        m_decimalPlacesValueLabel->setString(
-            fmt::format("{}", m_percentDecimalPlaces).c_str()
-        );
-    }
-
-    void createDecimalPlacesRow(float y) {
-        auto label = CCLabelBMFont::create(
-            "Decimal Places",
-            "bigFont.fnt"
-        );
-        label->setScale(0.42f);
-        label->setAnchorPoint({0.f, 0.5f});
-        label->setPosition({35.f, y});
-        m_pageContent->addChild(label);
-
-        auto leftSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        auto rightSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        if (leftSprite && rightSprite) {
-            leftSprite->setScale(0.65f);
-            rightSprite->setScale(0.65f);
-            rightSprite->setFlipX(true);
-
-            auto leftButton = CCMenuItemSpriteExtra::create(
-                leftSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangeDecimalPlaces
-                )
-            );
-            auto rightButton = CCMenuItemSpriteExtra::create(
-                rightSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangeDecimalPlaces
-                )
-            );
-            leftButton->setTag(-1);
-            rightButton->setTag(1);
-            leftButton->setPosition({290.f, y});
-            rightButton->setPosition({350.f, y});
-            setHalfOpacity(leftButton->getNormalImage());
-            setHalfOpacity(rightButton->getNormalImage());
-            m_pageMenu->addChild(leftButton);
-            m_pageMenu->addChild(rightButton);
-        }
-
-        m_decimalPlacesValueLabel = CCLabelBMFont::create(
-            "",
-            "goldFont.fnt"
-        );
-        m_decimalPlacesValueLabel->setScale(0.59f);
-        m_decimalPlacesValueLabel->setPosition({320.f, y});
-        m_pageContent->addChild(m_decimalPlacesValueLabel);
-        updateDecimalPlacesRow();
-    }
-
-    void updateDifficultyFontRow() {
-        if (!m_fontNameLabel || !m_fontPreviewLabel) {
-            return;
-        }
-
-        auto const& options = difficultyFontOptions();
-        m_difficultyFontIndex = std::min(
-            m_difficultyFontIndex,
-            options.size() - 1
-        );
-        auto const& selected = options[m_difficultyFontIndex];
-        m_fontNameLabel->setString(selected.name.c_str());
-        m_fontPreviewLabel->setFntFile(selected.file.c_str());
-        m_fontPreviewLabel->setString("5.0");
-        m_fontPreviewLabel->setScale(0.65f);
-        m_fontPreviewLabel->limitLabelWidth(80.f, 0.65f, 0.3f);
-    }
-
-    void createDifficultyFontRow(float y) {
-        auto label = CCLabelBMFont::create(
-            "Difficulty Font",
-            "bigFont.fnt"
-        );
-        label->setScale(0.38f);
-        label->setAnchorPoint({0.f, 0.5f});
-        label->setPosition({25.f, y});
-        m_pageContent->addChild(label);
-
-        auto leftSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        auto rightSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        if (leftSprite && rightSprite) {
-            leftSprite->setScale(0.75f);
-            rightSprite->setScale(0.75f);
-            rightSprite->setFlipX(true);
-
-            auto leftButton = CCMenuItemSpriteExtra::create(
-                leftSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangeDifficultyFont
-                )
-            );
-            auto rightButton = CCMenuItemSpriteExtra::create(
-                rightSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangeDifficultyFont
-                )
-            );
-            leftButton->setTag(-1);
-            rightButton->setTag(1);
-            leftButton->setPosition({215.f, y});
-            rightButton->setPosition({339.f, y});
-            setHalfOpacity(leftButton->getNormalImage());
-            setHalfOpacity(rightButton->getNormalImage());
-            m_pageMenu->addChild(leftButton);
-            m_pageMenu->addChild(rightButton);
-        }
-
-        m_fontNameLabel = CCLabelBMFont::create("", "goldFont.fnt");
-        m_fontNameLabel->setScale(0.5f);
-        m_fontNameLabel->setPosition({277.f, y + 11.f});
-        m_pageContent->addChild(m_fontNameLabel);
-
-        m_fontPreviewLabel = CCLabelBMFont::create(
-            "5.0",
-            DEFAULT_DIFFICULTY_FONT
-        );
-        m_fontPreviewLabel->setPosition({277.f, y - 11.f});
-        m_pageContent->addChild(m_fontPreviewLabel);
-        updateDifficultyFontRow();
-    }
-
-    void updatePartNameFontRow() {
-        if (!m_fontNameLabel || !m_fontPreviewLabel) {
-            return;
-        }
-
-        auto const& options = difficultyFontOptions();
-        m_partNameFontIndex = std::min(
-            m_partNameFontIndex,
-            options.size() - 1
-        );
-        auto const& selected = options[m_partNameFontIndex];
-        m_fontNameLabel->setString(selected.name.c_str());
-        m_fontPreviewLabel->setFntFile(selected.file.c_str());
-        m_fontPreviewLabel->setString("Part Name");
-        m_fontPreviewLabel->setScale(0.65f);
-        m_fontPreviewLabel->limitLabelWidth(80.f, 0.65f, 0.3f);
-    }
-
-    void createPartNameFontRow(float y) {
-        auto label = CCLabelBMFont::create(
-            "Part Name Font",
-            "bigFont.fnt"
-        );
-        label->setScale(0.38f);
-        label->setAnchorPoint({0.f, 0.5f});
-        label->setPosition({25.f, y});
-        m_pageContent->addChild(label);
-
-        auto leftSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        auto rightSprite = CCSprite::createWithSpriteFrameName(
-            "GJ_arrow_03_001.png"
-        );
-        if (leftSprite && rightSprite) {
-            leftSprite->setScale(0.75f);
-            rightSprite->setScale(0.75f);
-            rightSprite->setFlipX(true);
-
-            auto leftButton = CCMenuItemSpriteExtra::create(
-                leftSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangePartNameFont
-                )
-            );
-            auto rightButton = CCMenuItemSpriteExtra::create(
-                rightSprite,
-                this,
-                menu_selector(
-                    ProgressCustomizationPopup::onChangePartNameFont
-                )
-            );
-            leftButton->setTag(-1);
-            rightButton->setTag(1);
-            leftButton->setPosition({215.f, y});
-            rightButton->setPosition({339.f, y});
-            setHalfOpacity(leftButton->getNormalImage());
-            setHalfOpacity(rightButton->getNormalImage());
-            m_pageMenu->addChild(leftButton);
-            m_pageMenu->addChild(rightButton);
-        }
-
-        m_fontNameLabel = CCLabelBMFont::create("", "goldFont.fnt");
-        m_fontNameLabel->setScale(0.5f);
-        m_fontNameLabel->setPosition({277.f, y + 11.f});
-        m_pageContent->addChild(m_fontNameLabel);
-
-        m_fontPreviewLabel = CCLabelBMFont::create(
-            "Part Name",
-            DEFAULT_PART_NAME_FONT
-        );
-        m_fontPreviewLabel->setPosition({277.f, y - 11.f});
-        m_pageContent->addChild(m_fontPreviewLabel);
-        updatePartNameFontRow();
-    }
-
-    void showPage() {
-        if (m_pageContent) {
-            m_pageContent->removeFromParent();
-        }
-
-        m_scaleValueLabel = nullptr;
-        m_offsetXValueLabel = nullptr;
-        m_offsetYValueLabel = nullptr;
-        m_opacityValueLabel = nullptr;
-        m_difficultyFontScaleValueLabel = nullptr;
-        m_difficultyFontOffsetXValueLabel = nullptr;
-        m_difficultyFontOffsetYValueLabel = nullptr;
-        m_difficultyFaceScaleValueLabel = nullptr;
-        m_difficultyFaceOffsetXValueLabel = nullptr;
-        m_difficultyFaceOffsetYValueLabel = nullptr;
-        m_partNameScaleValueLabel = nullptr;
-        m_partNameOffsetXValueLabel = nullptr;
-        m_partNameOffsetYValueLabel = nullptr;
-        m_decimalPlacesValueLabel = nullptr;
-        m_fontNameLabel = nullptr;
-        m_fontPreviewLabel = nullptr;
-
-        m_pageContent = CCNode::create();
-        m_pageMenu = CCMenu::create();
-        m_pageMenu->setPosition({0.f, 0.f});
-        m_pageContent->addChild(m_pageMenu);
-        m_mainLayer->addChild(m_pageContent);
-
-        if (m_page == 0) {
-            createPageHeader("Markers & Info");
-            createCheckRow("Show Flags", 1, 195.f, m_showFlags);
-            createCheckRow(
-                "Show Difficulty",
-                3,
-                150.f,
-                m_showDifficulty
-            );
-            createCheckRow("Show Part Name", 4, 105.f, m_showLabel);
-            createDecimalPlacesRow(60.f);
-        }
-        else if (m_page == 1) {
-            createPageHeader("Text & Opacity");
-            createCheckRow(
-                "Show Total % / Timer",
-                5,
-                195.f,
-                m_showTotalPercent
-            );
-            createCheckRow(
-                "Show Part Percent",
-                6,
-                160.f,
-                m_showPartPercent
-            );
-            createCheckRow(
-                "Show Part Counter",
-                7,
-                125.f,
-                m_showPartIndex
-            );
-            createSliderRow(
-                "HUD Opacity",
-                104,
-                90.f,
-                m_hudOpacity,
-                0.3f,
-                1.f,
-                &m_opacityValueLabel
-            );
-        }
-        else if (m_page == 2) {
-            createPageHeader("HUD");
-            createSliderRow(
-                "Scale",
-                101,
-                175.f,
-                m_hudScale,
-                PROGRESS_HUD_SCALE_MIN,
-                PROGRESS_HUD_SCALE_MAX,
-                &m_scaleValueLabel
-            );
-            createSliderRow(
-                "Horizontal",
-                102,
-                125.f,
-                m_hudOffsetX,
-                PROGRESS_HUD_OFFSET_X_MIN,
-                PROGRESS_HUD_OFFSET_X_MAX,
-                &m_offsetXValueLabel
-            );
-            createSliderRow(
-                "Vertical",
-                103,
-                75.f,
-                m_hudOffsetY,
-                PROGRESS_HUD_OFFSET_Y_MIN,
-                PROGRESS_HUD_OFFSET_Y_MAX,
-                &m_offsetYValueLabel
-            );
-
-        }
-        else if (m_page == 3) {
-            createPageHeader("Difficulty Font");
-            createDifficultyFontRow(195.f);
-            createSliderRow(
-                "Scale",
-                108,
-                145.f,
-                m_difficultyFontScale,
-                PROGRESS_ELEMENT_SCALE_MIN,
-                PROGRESS_ELEMENT_SCALE_MAX,
-                &m_difficultyFontScaleValueLabel
-            );
-            createSliderRow(
-                "Horizontal",
-                105,
-                100.f,
-                m_difficultyFontOffsetX,
-                PROGRESS_ELEMENT_OFFSET_MIN,
-                PROGRESS_ELEMENT_OFFSET_MAX,
-                &m_difficultyFontOffsetXValueLabel
-            );
-            createSliderRow(
-                "Vertical",
-                106,
-                55.f,
-                m_difficultyFontOffsetY,
-                PROGRESS_ELEMENT_OFFSET_MIN,
-                PROGRESS_ELEMENT_OFFSET_MAX,
-                &m_difficultyFontOffsetYValueLabel
-            );
-        }
-        else if (m_page == 4) {
-            createPageHeader("Part Name");
-            createPartNameFontRow(195.f);
-            createSliderRow(
-                "Scale",
-                111,
-                145.f,
-                m_partNameScale,
-                PROGRESS_ELEMENT_SCALE_MIN,
-                PROGRESS_ELEMENT_SCALE_MAX,
-                &m_partNameScaleValueLabel
-            );
-            createSliderRow(
-                "Horizontal",
-                112,
-                100.f,
-                m_partNameOffsetX,
-                PART_NAME_OFFSET_X_MIN,
-                PART_NAME_OFFSET_X_MAX,
-                &m_partNameOffsetXValueLabel
-            );
-            createSliderRow(
-                "Vertical",
-                113,
-                55.f,
-                m_partNameOffsetY,
-                PROGRESS_ELEMENT_OFFSET_MIN,
-                PROGRESS_ELEMENT_OFFSET_MAX,
-                &m_partNameOffsetYValueLabel
-            );
-        }
-        else if (m_page == 5) {
-            createPageHeader("Difficulty Face");
-            createSliderRow(
-                "Scale",
-                107,
-                175.f,
-                m_difficultyFaceScale,
-                PROGRESS_ELEMENT_SCALE_MIN,
-                PROGRESS_ELEMENT_SCALE_MAX,
-                &m_difficultyFaceScaleValueLabel
-            );
-            createSliderRow(
-                "Horizontal",
-                109,
-                125.f,
-                m_difficultyFaceOffsetX,
-                PROGRESS_ELEMENT_OFFSET_MIN,
-                PROGRESS_ELEMENT_OFFSET_MAX,
-                &m_difficultyFaceOffsetXValueLabel
-            );
-            createSliderRow(
-                "Vertical",
-                110,
-                75.f,
-                m_difficultyFaceOffsetY,
-                PROGRESS_ELEMENT_OFFSET_MIN,
-                PROGRESS_ELEMENT_OFFSET_MAX,
-                &m_difficultyFaceOffsetYValueLabel
-            );
-        }
-
-        m_pageLabel->setString(
-            fmt::format("{} / {}", m_page + 1, PAGE_COUNT).c_str()
-        );
-    }
-
-    void updateCheckSprite(CCMenuItemSpriteExtra* button, bool checked) {
-        auto sprite = static_cast<CCSprite*>(button->getNormalImage());
-        if (!sprite) return;
-
-        auto frame = CCSpriteFrameCache::sharedSpriteFrameCache()
-            ->spriteFrameByName(
-                checked
-                    ? "GJ_checkOn_001.png"
-                    : "GJ_checkOff_001.png"
-            );
-        if (frame) {
-            sprite->setDisplayFrame(frame);
-        }
-    }
-
-    void onCheckClicked(CCObject* sender) {
-        auto button = static_cast<CCMenuItemSpriteExtra*>(sender);
-        if (!button) return;
-
-        if (button->getTag() != 8) {
-            showTipp7MembershipNotice();
-            return;
-        }
-
-        m_hudEnabled = !m_hudEnabled;
-        Mod::get()->setSavedValue(
-            SETTING_SHOW_PROGRESS_HUD,
-            m_hudEnabled
-        );
-        updateCheckSprite(button, m_hudEnabled);
-        callSectionProgressRefresh();
-    }
-
-    void onLockedSlider(CCObject*) {
-        showTipp7MembershipNotice();
-
-        WeakRef<ProgressCustomizationPopup> self(this);
-        geode::queueInMainThread([self] {
-            if (auto owner = self.lock()) {
-                owner->showPage();
-            }
-        });
-    }
-
-    void onChangeDifficultyFont(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onChangePartNameFont(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void onChangeDecimalPlaces(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void updateSliderValueLabel(int tag) {
-        if (tag == 101 && m_scaleValueLabel) {
-            m_scaleValueLabel->setString(
-                fmt::format("{:.0f}%", m_hudScale * 100.f).c_str()
-            );
-        }
-        else if (tag == 102 && m_offsetXValueLabel) {
-            m_offsetXValueLabel->setString(
-                fmt::format("{:+.0f}", m_hudOffsetX).c_str()
-            );
-        }
-        else if (tag == 103 && m_offsetYValueLabel) {
-            m_offsetYValueLabel->setString(
-                fmt::format("{:+.0f}", m_hudOffsetY).c_str()
-            );
-        }
-        else if (tag == 104 && m_opacityValueLabel) {
-            m_opacityValueLabel->setString(
-                fmt::format("{:.0f}%", m_hudOpacity * 100.f).c_str()
-            );
-        }
-        else if (tag == 105 && m_difficultyFontOffsetXValueLabel) {
-            m_difficultyFontOffsetXValueLabel->setString(
-                fmt::format("{:+.0f}", m_difficultyFontOffsetX).c_str()
-            );
-        }
-        else if (tag == 106 && m_difficultyFontOffsetYValueLabel) {
-            m_difficultyFontOffsetYValueLabel->setString(
-                fmt::format("{:+.0f}", m_difficultyFontOffsetY).c_str()
-            );
-        }
-        else if (tag == 107 && m_difficultyFaceScaleValueLabel) {
-            m_difficultyFaceScaleValueLabel->setString(
-                fmt::format(
-                    "{:.0f}%",
-                    m_difficultyFaceScale * 100.f
-                ).c_str()
-            );
-        }
-        else if (tag == 108 && m_difficultyFontScaleValueLabel) {
-            m_difficultyFontScaleValueLabel->setString(
-                fmt::format(
-                    "{:.0f}%",
-                    m_difficultyFontScale * 100.f
-                ).c_str()
-            );
-        }
-        else if (tag == 109 && m_difficultyFaceOffsetXValueLabel) {
-            m_difficultyFaceOffsetXValueLabel->setString(
-                fmt::format("{:+.0f}", m_difficultyFaceOffsetX).c_str()
-            );
-        }
-        else if (tag == 110 && m_difficultyFaceOffsetYValueLabel) {
-            m_difficultyFaceOffsetYValueLabel->setString(
-                fmt::format("{:+.0f}", m_difficultyFaceOffsetY).c_str()
-            );
-        }
-        else if (tag == 111 && m_partNameScaleValueLabel) {
-            m_partNameScaleValueLabel->setString(
-                fmt::format("{:.0f}%", m_partNameScale * 100.f).c_str()
-            );
-        }
-        else if (tag == 112 && m_partNameOffsetXValueLabel) {
-            m_partNameOffsetXValueLabel->setString(
-                fmt::format("{:+.0f}", m_partNameOffsetX).c_str()
-            );
-        }
-        else if (tag == 113 && m_partNameOffsetYValueLabel) {
-            m_partNameOffsetYValueLabel->setString(
-                fmt::format("{:+.0f}", m_partNameOffsetY).c_str()
-            );
-        }
-    }
-
-    void onChangePage(CCObject* sender) {
-        auto button = static_cast<CCMenuItemSpriteExtra*>(sender);
-        if (!button) return;
-
-        m_page = (m_page + button->getTag() + PAGE_COUNT) % PAGE_COUNT;
-        showPage();
-    }
-
-    void onReset(CCObject*) {
-        showTipp7MembershipNotice();
-    }
-
-    void callSectionProgressRefresh() {
-        auto playLayer = PlayLayer::get();
-        if (!playLayer) {
-            return;
-        }
-        auto node = playLayer->getChildByID(
-            "section-progress-bar"
-        );
-        if (!node) {
-            log::warn("section-progress-bar node not found");
-            return;
-        }
-        auto progressBar = typeinfo_cast<SectionProgressBar*>(node);
-        if (!progressBar) {
-            log::warn("Failed to cast node to SectionProgressBar");
-            return;
-        }
-        progressBar->reloadCustomizationSettings();
-    }
-
-public:
-    void onClose(CCObject* sender) override {
-        if (auto parent = m_parent.lock()) {
-            parent->setSectionControlsEnabled(true);
-        }
-        Popup::onClose(sender);
-    }
-
-    static ProgressCustomizationPopup* create(SectionListPopup* parent) {
-        auto ret = new ProgressCustomizationPopup();
-
-        if (ret && ret->init(parent)) {
-            ret->autorelease();
-            return ret;
-        }
-
-        delete ret;
-        return nullptr;
-    }
-};
-
-// PauseLayer Button
-
 void SectionListPopup::onOpenCustomizationSettings(CCObject*) {
-    if (auto popup = ProgressCustomizationPopup::create(this)) {
-        setSectionControlsEnabled(false);
-        popup->show();
-    }
+    showTipp7MembershipNotice();
 }
-
-class $modify(MyPauseLayer, PauseLayer) {
+class $modify(ProcessDifficultyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
@@ -6388,7 +5456,7 @@ class $modify(MyPauseLayer, PauseLayer) {
         auto btn = CCMenuItemSpriteExtra::create(
             spr,
             this,
-            menu_selector(MyPauseLayer::onOpenSections)
+            menu_selector(ProcessDifficultyPauseLayer::onOpenSections)
         );
         btn->setAnchorPoint({0.0f, 0.5f});
         btn->setPosition({0.f, 0.f});
@@ -6400,7 +5468,7 @@ class $modify(MyPauseLayer, PauseLayer) {
         auto myDataButton = CCMenuItemSpriteExtra::create(
             myDataSprite,
             this,
-            menu_selector(MyPauseLayer::onOpenMyData)
+            menu_selector(ProcessDifficultyPauseLayer::onOpenMyData)
         );
         myDataButton->setAnchorPoint({0.f, 0.5f});
         myDataButton->setPosition({0.f, 24.f});
@@ -6427,7 +5495,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 
 };
 
-class $modify(MyPlayLayer, PlayLayer) {
+class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
             return false;
@@ -6439,7 +5507,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 
         if (bar) {
             bar->setZOrder(99999);
-            bar->setID("section-progress-bar");
+            bar->setID("section-progress-bar"_spr);
 
             this->addChild(bar);
         }

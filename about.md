@@ -15,3 +15,7 @@ membership distribution. Membership adds visual-element customization only.
 4. Assign a difficulty value from 0 to 100.
 
 Use **Server Map List** to find presets shared by other players.
+
+Online sharing is optional. Before an upload, the mod lists the account and
+preset fields that will become public and asks for confirmation. Uploaded data
+can be deleted from the same screen.
