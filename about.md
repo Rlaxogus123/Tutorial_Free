@@ -14,6 +14,9 @@ membership distribution. Membership adds visual-element customization only.
 3. Add each section at its starting percentage.
 4. Assign a difficulty value from 0 to 100.
 
+Use the settings button in **Part Setting** to turn **Show Flags** on or off.
+Your choice is saved and takes effect immediately.
+
 Use **Server Map List** to find presets shared by other players.
 
 Online sharing is optional. Before an upload, the mod lists the account and

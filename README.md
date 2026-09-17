@@ -11,8 +11,9 @@ visual-element customization: custom flag text, percentage source, icons,
 colors, detail controls, and progress-HUD appearance settings.
 
 The free distribution can view shared FlagData and edit fixed percentages. Its
-settings button briefly explains which appearance controls belong to the
-membership distribution; inactive member-only editors are not included here.
+settings button opens a **Show Flags** toggle that saves your choice and updates
+the progress HUD immediately. Other appearance controls belong to the membership
+distribution; inactive member-only editors are not included here.
 
 ## Online sharing and privacy
 

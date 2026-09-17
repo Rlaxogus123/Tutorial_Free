@@ -109,14 +109,6 @@ static float sanitizeFlagDetailValue(
         : fallback;
 }
 
-static void showTipp7MembershipNotice() {
-    FLAlertLayer::create(
-        "Tipp7 Membership",
-        "Additional customization is available only to Tipp7 membership users.",
-        "OK"
-    )->show();
-}
-
 class FaceSelectPopup;
 class FlagDataListPopup;
 class DownloadMenu;
@@ -5442,8 +5434,71 @@ static void syncActiveFlagProgressBar(
     progressBar->setFlags(flags);
 }
 
+class FreeProgressSettingsPopup : public geode::Popup {
+protected:
+    WeakRef<SectionListPopup> m_parent;
+
+    bool init(SectionListPopup* parent) {
+        if (!Popup::init(300.f, 150.f)) return false;
+        m_parent = parent;
+        this->setID("free-progress-settings-popup"_spr);
+        this->setTitle("Progress Settings");
+
+        auto label = CCLabelBMFont::create("Show Flags", "bigFont.fnt");
+        label->setScale(0.5f);
+        label->setAnchorPoint({0.f, 0.5f});
+        label->setPosition({35.f, 75.f});
+        m_mainLayer->addChild(label);
+
+        auto toggle = CCMenuItemToggler::createWithStandardSprites(
+            this,
+            menu_selector(FreeProgressSettingsPopup::onToggleFlags),
+            0.75f
+        );
+        toggle->toggle(isFlagHUDEnabled());
+        toggle->setPosition({250.f, 75.f});
+        toggle->setID("show-flags-toggle"_spr);
+        m_buttonMenu->addChild(toggle);
+        return true;
+    }
+
+    void onToggleFlags(CCObject* sender) {
+        auto toggle = static_cast<CCMenuItemToggler*>(sender);
+        Mod::get()->setSavedValue(SETTING_SHOW_FLAGS, !toggle->isToggled());
+
+        if (auto playLayer = PlayLayer::get()) {
+            auto node = playLayer->getChildByID("section-progress-bar"_spr);
+            if (!node) return;
+            if (auto progressBar = typeinfo_cast<SectionProgressBar*>(node)) {
+                progressBar->reloadCustomizationSettings();
+            }
+        }
+    }
+
+public:
+    void onClose(CCObject* sender) override {
+        if (auto parent = m_parent.lock()) {
+            parent->setSectionControlsEnabled(true);
+        }
+        Popup::onClose(sender);
+    }
+
+    static FreeProgressSettingsPopup* create(SectionListPopup* parent) {
+        auto ret = new FreeProgressSettingsPopup();
+        if (ret && ret->init(parent)) {
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+};
+
 void SectionListPopup::onOpenCustomizationSettings(CCObject*) {
-    showTipp7MembershipNotice();
+    if (auto popup = FreeProgressSettingsPopup::create(this)) {
+        setSectionControlsEnabled(false);
+        popup->show();
+    }
 }
 class $modify(ProcessDifficultyPauseLayer, PauseLayer) {
     void customSetup() {

@@ -1,3 +1,8 @@
+# 1.2.2
+
+- Allow the free distribution to toggle Show Flags from Progress Settings.
+- Save flag visibility and refresh the active progress HUD immediately.
+
 # 1.2.1
 
 - Add explicit confirmation listing all data shared by a public server upload.

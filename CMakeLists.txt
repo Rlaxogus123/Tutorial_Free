@@ -8,7 +8,7 @@ else()
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(ProcessDifficulty VERSION 1.2.1)
+project(ProcessDifficulty VERSION 1.2.2)
 
 # Visual Studio 18 currently crashes while generating code for Geode's large
 # precompiled header. Compiling the same headers normally is stable.
