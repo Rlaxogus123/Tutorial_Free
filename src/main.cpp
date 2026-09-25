@@ -1182,6 +1182,7 @@ static void previewDeathSound(
     if (resolvedPath.empty()) return;
     auto engine = FMODAudioEngine::sharedEngine();
     if (!engine) return;
+    engine->resumeAllEffects();
     auto const effect = engine->playEffect(
         gd::string(resolvedPath),
         1.f,
@@ -1195,6 +1196,7 @@ struct ActiveDeathSoundOverride {
     bool enabled = false;
     std::string path;
     float volume = 1.f;
+    bool played = false;
 };
 
 static thread_local ActiveDeathSoundOverride s_activeDeathSoundOverride;
@@ -1241,60 +1243,14 @@ static bool isDefaultDeathSound(gd::string const& value) {
 }
 
 static CCNode* createDeathSoundButtonIcon(bool enabled) {
-    auto holder = CCNode::create();
-    holder->setContentSize({36.f, 36.f});
-    holder->setAnchorPoint({0.5f, 0.5f});
-    holder->ignoreAnchorPointForPosition(false);
-
-    auto background = CCSprite::createWithSpriteFrameName("GJ_button_01.png");
-    if (background) {
-        auto const size = background->getContentSize();
-        if (size.width > 0.f && size.height > 0.f) {
-            background->setScale(std::min(
-                35.f / size.width,
-                35.f / size.height
-            ));
-        }
-        background->setPosition({18.f, 18.f});
-        background->setOpacity(enabled ? 255 : 185);
-        holder->addChild(background);
-    }
-
-    auto steak = CCDrawNode::create();
-    CCPoint meat[] = {
-        {7.f, 16.f}, {10.f, 10.f}, {19.f, 8.f}, {28.f, 12.f},
-        {30.f, 19.f}, {25.f, 26.f}, {15.f, 27.f}, {8.f, 22.f}
-    };
-    steak->drawPolygon(
-        meat,
-        8,
-        ccc4f(0.82f, 0.18f, 0.16f, enabled ? 1.f : 0.72f),
-        1.f,
-        ccc4f(0.45f, 0.08f, 0.07f, enabled ? 1.f : 0.72f)
+    auto sprite = CCSprite::createWithSpriteFrameName(
+        "GJ_fxOnBtn_001.png"
     );
-    CCPoint fat[] = {
-        {9.f, 17.f}, {12.f, 12.f}, {17.f, 11.f},
-        {19.f, 15.f}, {16.f, 20.f}, {11.f, 21.f}
-    };
-    steak->drawPolygon(
-        fat,
-        6,
-        ccc4f(1.f, 0.84f, 0.59f, enabled ? 1.f : 0.72f),
-        0.5f,
-        ccc4f(0.62f, 0.25f, 0.16f, enabled ? 1.f : 0.72f)
-    );
-    steak->drawDot(
-        {23.5f, 18.f},
-        3.4f,
-        ccc4f(1.f, 0.88f, 0.68f, enabled ? 1.f : 0.72f)
-    );
-    steak->drawDot(
-        {23.5f, 18.f},
-        1.5f,
-        ccc4f(0.72f, 0.18f, 0.14f, enabled ? 1.f : 0.72f)
-    );
-    holder->addChild(steak);
-    return holder;
+    if (!sprite) return CCNode::create();
+    sprite->setAnchorPoint({0.5f, 0.5f});
+    sprite->setScale(0.65f);
+    sprite->setOpacity(enabled ? 255 : 205);
+    return sprite;
 }
 
 
@@ -6403,7 +6359,14 @@ class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
             s_activeDeathSoundOverride.enabled &&
             isDefaultDeathSound(path)
         ) {
-            return -1;
+            if (s_activeDeathSoundOverride.played) return -1;
+            s_activeDeathSoundOverride.played = true;
+            return FMODAudioEngine::playEffect(
+                gd::string(s_activeDeathSoundOverride.path),
+                1.f,
+                0.f,
+                s_activeDeathSoundOverride.volume
+            );
         }
         return FMODAudioEngine::playEffect(path);
     }
@@ -6418,7 +6381,18 @@ class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
             s_activeDeathSoundOverride.enabled &&
             isDefaultDeathSound(path)
         ) {
-            return -1;
+            if (s_activeDeathSoundOverride.played) return -1;
+            s_activeDeathSoundOverride.played = true;
+            return FMODAudioEngine::playEffect(
+                gd::string(s_activeDeathSoundOverride.path),
+                speed,
+                unknown,
+                std::clamp(
+                    volume * s_activeDeathSoundOverride.volume,
+                    0.f,
+                    1.f
+                )
+            );
         }
         return FMODAudioEngine::playEffect(path, speed, unknown, volume);
     }
@@ -6448,7 +6422,14 @@ class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
             s_activeDeathSoundOverride.enabled &&
             isDefaultDeathSound(path)
         ) {
-            return -1;
+            if (s_activeDeathSoundOverride.played) return -1;
+            s_activeDeathSoundOverride.played = true;
+            path = gd::string(s_activeDeathSoundOverride.path);
+            volume = std::clamp(
+                volume * s_activeDeathSoundOverride.volume,
+                0.f,
+                1.f
+            );
         }
         return FMODAudioEngine::playEffectAdvanced(
             path,
@@ -6496,7 +6477,14 @@ class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
             s_activeDeathSoundOverride.enabled &&
             isDefaultDeathSound(path)
         ) {
-            return -1;
+            if (s_activeDeathSoundOverride.played) return -1;
+            s_activeDeathSoundOverride.played = true;
+            path = gd::string(s_activeDeathSoundOverride.path);
+            volume = std::clamp(
+                volume * s_activeDeathSoundOverride.volume,
+                0.f,
+                1.f
+            );
         }
         return FMODAudioEngine::queuePlayEffect(
             path,
@@ -6546,16 +6534,5 @@ class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
         s_activeDeathSoundOverride = deathSound;
         PlayLayer::destroyPlayer(player, object);
         s_activeDeathSoundOverride = previousOverride;
-
-        if (!deathSound.enabled || deathSound.volume <= 0.f) return;
-        auto engine = FMODAudioEngine::sharedEngine();
-        if (!engine) return;
-        auto const effect = engine->playEffect(
-            gd::string(deathSound.path),
-            1.f,
-            0.f,
-            deathSound.volume
-        );
-        if (effect >= 0) engine->resumeEffect(effect);
     }
 };

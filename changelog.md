@@ -1,3 +1,9 @@
+# 1.3.2
+
+- Replace the default death sound exactly once without forced duplicate playback.
+- Use native Geometry Dash icons for death sound settings and previews.
+- Play death sound previews immediately while the pause menu is open.
+
 # 1.3.1
 
 - Replace per-section death sounds with one local per-map percentage trigger.

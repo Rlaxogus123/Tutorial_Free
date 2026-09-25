@@ -62,11 +62,20 @@ protected:
         holder->setAnchorPoint({0.5f, 0.5f});
         holder->ignoreAnchorPointForPosition(false);
 
-        auto drawing = CCDrawNode::create();
-        auto const green = ccc4f(0.f, 1.f, 0.f, 1.f);
-        CCPoint triangle[] = {{7.f, 5.f}, {19.f, 12.f}, {7.f, 19.f}};
-        drawing->drawPolygon(triangle, 3, green, 0.f, green);
-        holder->addChild(drawing);
+        auto sprite = CCSprite::createWithSpriteFrameName(
+            "GJ_playBtn2_001.png"
+        );
+        if (sprite) {
+            auto const size = sprite->getContentSize();
+            if (size.width > 0.f && size.height > 0.f) {
+                sprite->setScale(std::min(
+                    23.f / size.width,
+                    23.f / size.height
+                ));
+            }
+            sprite->setPosition({12.f, 12.f});
+            holder->addChild(sprite);
+        }
         return holder;
     }
 
