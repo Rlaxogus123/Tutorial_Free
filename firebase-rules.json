@@ -48,15 +48,6 @@
               "faces": {
                 ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 0 && newData.val() <= 32"
               },
-              "deathSoundOverride": {
-                ".validate": "newData.isBoolean()"
-              },
-              "deathSound": {
-                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
-              },
-              "deathSoundVolume": {
-                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
-              },
               "$other": {
                 ".validate": false
               }

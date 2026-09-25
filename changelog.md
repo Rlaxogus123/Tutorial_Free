@@ -1,3 +1,11 @@
+# 1.3.1
+
+- Replace per-section death sounds with one local per-map percentage trigger.
+- Move death sound settings next to Flag Data with a dedicated steak button.
+- Fix sound preview while the game is paused and make death replacement explicit.
+- List only packaged Geometry Dash audio files that exist on the device.
+- Keep all death sound settings local and out of Firebase uploads.
+
 # 1.3.0
 
 - Refine the difficulty graph layout, colors, point details, and click-to-dismiss behavior.
