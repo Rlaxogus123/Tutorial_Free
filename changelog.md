@@ -1,3 +1,15 @@
+# 1.3.0
+
+- Refine the difficulty graph layout, colors, point details, and click-to-dismiss behavior.
+- Compact the SectionData editor and add per-section death sound overrides.
+- Add built-in and custom death sounds with preview, volume, import, and delete controls.
+- Share built-in death sound selections and volume through SectionData presets.
+
+# 1.2.3
+
+- Add an interactive SectionData difficulty graph with progress on the x-axis and auto-scaled difficulty on the y-axis.
+- Show each section's part name, difficulty value, and face when its graph point is hovered or pressed.
+
 # 1.2.2
 
 - Allow the free distribution to toggle Show Flags from Progress Settings.

@@ -1,9 +1,13 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PauseLayer.hpp>
+#include <Geode/modify/FMODAudioEngine.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/binding/GJGameLevel.hpp>
 #include <Geode/binding/GJAccountManager.hpp>
 #include <Geode/binding/GameManager.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
+#include <Geode/binding/MusicDownloadManager.hpp>
+#include <Geode/binding/SFXInfoObject.hpp>
 #include <Geode/binding/SimplePlayer.hpp>
 #include <Geode/binding/FLAlertLayer.hpp>
 #include <Geode/binding/FLAlertLayerProtocol.hpp>
@@ -11,7 +15,10 @@
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/ui/GeodeUI.hpp>
+#include <Geode/utils/Keyboard.hpp>
 #include <Geode/utils/web.hpp>
+#include <Geode/binding/Slider.hpp>
+#include <Geode/binding/SliderThumb.hpp>
 
 #include "FirebaseConfig.hpp"
 
@@ -71,6 +78,10 @@ struct SectionData {
     std::string partName;
     int faces;
     std::string customImage;
+    bool deathSoundOverride = false;
+    std::string deathSound = "explode_11.ogg";
+    bool deathSoundCustom = false;
+    float deathSoundVolume = 1.f;
 };
 
 enum class FlagPercentSource {
@@ -114,6 +125,8 @@ class FlagDataListPopup;
 class DownloadMenu;
 class ServerMapListPopup;
 class MyDataListPopup;
+class SectionDifficultyGraphPopup;
+class DeathSoundPopup;
 
 static void setPopupControlsEnabled(CCNode* node, bool enabled) {
     if (!node) return;
@@ -147,6 +160,10 @@ static matjson::Value sectionToJson(SectionData const& s) {
     obj["partName"] = s.partName;
     obj["faces"] = s.faces;
     obj["customImage"] = s.customImage;
+    obj["deathSoundOverride"] = s.deathSoundOverride;
+    obj["deathSound"] = s.deathSound;
+    obj["deathSoundCustom"] = s.deathSoundCustom;
+    obj["deathSoundVolume"] = std::clamp(s.deathSoundVolume, 0.f, 1.f);
 
     return obj;
 }
@@ -157,7 +174,15 @@ static SectionData sectionFromJson(matjson::Value const& v) {
         static_cast<int>(v["difficulty"].asInt().unwrapOr(0)),
         v["partName"].asString().unwrapOr(""),
         static_cast<int>(v["faces"].asInt().unwrapOr(0)),
-        v["customImage"].asString().unwrapOr("")
+        v["customImage"].asString().unwrapOr(""),
+        v["deathSoundOverride"].asBool().unwrapOr(false),
+        v["deathSound"].asString().unwrapOr("explode_11.ogg"),
+        v["deathSoundCustom"].asBool().unwrapOr(false),
+        static_cast<float>(std::clamp(
+            v["deathSoundVolume"].asDouble().unwrapOr(1.0),
+            0.0,
+            1.0
+        ))
     };
 }
 
@@ -964,6 +989,282 @@ static CCSprite* createFaceSprite(int faceID, std::string const& customImage = "
 }
 
 
+static constexpr char const* CUSTOM_DEATH_SOUNDS_KEY =
+    "difficulty-custom-death-sounds";
+
+struct DeathSoundOption {
+    std::string label;
+    std::string path;
+};
+
+static bool parseSfxDeathSoundKey(std::string const& key, int& id) {
+    if (!key.starts_with("sfx:") || key.size() <= 4) return false;
+    try {
+        size_t parsed = 0;
+        auto value = std::stoi(key.substr(4), &parsed);
+        if (parsed != key.size() - 4 || value <= 0 || value > 99999) {
+            return false;
+        }
+        id = value;
+        return true;
+    }
+    catch (...) {
+        return false;
+    }
+}
+
+static std::vector<DeathSoundOption> geometryDashDeathSounds() {
+    std::vector<DeathSoundOption> options = {
+        {"Default Explosion", "explode_11.ogg"},
+        {"Magic Explosion", "magicExplosion.ogg"},
+        {"Achievement", "achievement_01.ogg"},
+        {"Buy Item 1", "buyItem01.ogg"},
+        {"Buy Item 3", "buyItem03.ogg"},
+        {"Chest Open", "chestOpen01.ogg"},
+        {"Chest Land", "chestLand.ogg"},
+        {"Chest 7", "chest07.ogg"},
+        {"Chest 8", "chest08.ogg"},
+        {"Counter", "counter003.ogg"},
+        {"Crystal", "crystal01.ogg"},
+        {"Door Heavy", "door001.ogg"},
+        {"Door 1", "door01.ogg"},
+        {"Door 2", "door02.ogg"},
+        {"End Start", "endStart_02.ogg"},
+        {"Gold 1", "gold01.ogg"},
+        {"Gold 2", "gold02.ogg"},
+        {"Grunt 1", "grunt01.ogg"},
+        {"Grunt 2", "grunt02.ogg"},
+        {"Grunt 3", "grunt03.ogg"},
+        {"High Score", "highscoreGet02.ogg"},
+        {"Play", "playSound_01.ogg"},
+        {"Quit", "quitSound_01.ogg"},
+        {"Reward", "reward01.ogg"},
+        {"Secret Key", "secretKey.ogg"},
+        {"Unlock Gauntlet", "unlockGauntlet.ogg"},
+        {"Unlock Path", "unlockPath.ogg"},
+        {"Jumpscare", "jumpscareAudio.mp3"},
+        {"Fire In The Hole", "sfx:4451"},
+        {"Fire In The Hole 2", "sfx:4450"},
+        {"I See You 01", "sfx:4821"},
+        {"I See You 02", "sfx:5062"},
+        {"Arr Matey", "sfx:4467"},
+        {"Intrusion Detected", "sfx:8386"},
+        {"So It Has Come To This", "sfx:5107"},
+        {"Your Power Is Meaningless", "sfx:5170"},
+        {"You Should Not Be Here", "sfx:10271"},
+        {"Why Are You Here", "sfx:22589"},
+        {"You Again", "sfx:22607"},
+        {"There Is No Way Out", "sfx:22587"},
+        {"Time Is Running Out", "sfx:22588"},
+        {"Fire In The Hole 01", "sfx:14278"},
+        {"Fire In The Hole 02", "sfx:14279"},
+        {"Fire In The Hole 03", "sfx:14280"},
+        {"Fire In The Hole 04", "sfx:14281"},
+        {"Fire In The Hole 05", "sfx:14282"},
+    };
+
+    auto manager = MusicDownloadManager::sharedState();
+    if (!manager || !manager->m_sfxObjects) return options;
+
+    std::vector<DeathSoundOption> downloaded;
+    for (
+        auto [id, object] :
+        CCDictionaryExt<int, SFXInfoObject*>(manager->m_sfxObjects)
+    ) {
+        if (
+            !object ||
+            object->m_folder ||
+            !manager->isSFXDownloaded(object->m_sfxID)
+        ) continue;
+
+        auto key = fmt::format("sfx:{}", object->m_sfxID);
+        auto duplicate = std::any_of(
+            options.begin(),
+            options.end(),
+            [&key](DeathSoundOption const& option) {
+                return option.path == key;
+            }
+        );
+        if (!duplicate) {
+            downloaded.push_back({
+                std::string(object->m_name.c_str()),
+                std::move(key)
+            });
+        }
+    }
+    std::sort(
+        downloaded.begin(),
+        downloaded.end(),
+        [](DeathSoundOption const& left, DeathSoundOption const& right) {
+            return left.label < right.label;
+        }
+    );
+    options.insert(options.end(), downloaded.begin(), downloaded.end());
+    return options;
+}
+
+static bool isGeometryDashDeathSound(std::string const& path) {
+    int sfxID = 0;
+    if (parseSfxDeathSoundKey(path, sfxID)) return true;
+    auto const& options = geometryDashDeathSounds();
+    return std::any_of(
+        options.begin(),
+        options.end(),
+        [&path](DeathSoundOption const& option) {
+            return option.path == path;
+        }
+    );
+}
+
+static std::string resolveDeathSoundPath(std::string const& key) {
+    int sfxID = 0;
+    if (!parseSfxDeathSoundKey(key, sfxID)) return key;
+    auto manager = MusicDownloadManager::sharedState();
+    if (!manager || !manager->isSFXDownloaded(sfxID)) return "";
+    return std::string(manager->pathForSFX(sfxID).c_str());
+}
+
+static bool ensureDeathSoundAvailable(std::string const& key) {
+    int sfxID = 0;
+    if (!parseSfxDeathSoundKey(key, sfxID)) return true;
+    auto manager = MusicDownloadManager::sharedState();
+    if (!manager) return false;
+    if (manager->isSFXDownloaded(sfxID)) return true;
+    manager->downloadSFX(sfxID);
+    return false;
+}
+
+static std::vector<std::string> loadCustomDeathSounds() {
+    std::vector<std::string> sounds;
+    auto value = Mod::get()->getSavedValue<matjson::Value>(
+        CUSTOM_DEATH_SOUNDS_KEY,
+        matjson::Value::array()
+    );
+    if (!value.isArray()) return sounds;
+
+    for (auto const& item : value) {
+        auto path = item.asString().unwrapOr("");
+        if (!path.empty() && std::filesystem::exists(path)) {
+            sounds.push_back(std::move(path));
+        }
+    }
+    return sounds;
+}
+
+static void saveCustomDeathSounds(std::vector<std::string> const& sounds) {
+    auto value = matjson::Value::array();
+    for (auto const& path : sounds) value.push(path);
+    Mod::get()->setSavedValue(CUSTOM_DEATH_SOUNDS_KEY, value);
+}
+
+static std::string customDeathSoundName(std::string const& path) {
+    auto name = std::filesystem::path(path).filename().string();
+    return name.empty() ? "Custom Sound" : name;
+}
+
+static void previewDeathSound(
+    std::string const& path,
+    float volume
+) {
+    if (path.empty() || volume <= 0.f) return;
+    if (!ensureDeathSoundAvailable(path)) {
+        Notification::create("Downloading SFX...", NotificationIcon::Info)
+            ->show();
+        return;
+    }
+    auto const resolvedPath = resolveDeathSoundPath(path);
+    if (resolvedPath.empty()) return;
+    auto engine = FMODAudioEngine::sharedEngine();
+    if (!engine) return;
+    engine->playEffect(
+        gd::string(resolvedPath),
+        1.f,
+        0.f,
+        std::clamp(volume, 0.f, 1.f)
+    );
+}
+
+struct ActiveDeathSoundOverride {
+    bool enabled = false;
+    std::string path;
+    float volume = 1.f;
+};
+
+static thread_local ActiveDeathSoundOverride s_activeDeathSoundOverride;
+
+static ActiveDeathSoundOverride deathSoundForCurrentSection(
+    PlayLayer* playLayer
+) {
+    auto sections = loadSections();
+    sortSections(sections);
+
+    SectionData const* current = nullptr;
+    auto const percent = getCurrentLevelPercent(playLayer);
+    for (auto const& section : sections) {
+        if (percent < section.startPercent) break;
+        current = &section;
+    }
+    if (!current || !current->deathSoundOverride) return {};
+
+    std::string resolvedSound;
+    if (current->deathSoundCustom) {
+        if (!std::filesystem::exists(current->deathSound)) return {};
+        resolvedSound = current->deathSound;
+    }
+    else {
+        if (!isGeometryDashDeathSound(current->deathSound)) return {};
+        resolvedSound = resolveDeathSoundPath(current->deathSound);
+        if (resolvedSound.empty()) {
+            ensureDeathSoundAvailable(current->deathSound);
+            return {};
+        }
+    }
+
+    return {
+        true,
+        std::move(resolvedSound),
+        std::clamp(current->deathSoundVolume, 0.f, 1.f)
+    };
+}
+
+static bool isDefaultDeathSound(gd::string const& value) {
+    auto path = std::string(value.c_str());
+    std::replace(path.begin(), path.end(), '\\', '/');
+    auto const separator = path.find_last_of('/');
+    if (separator != std::string::npos) path.erase(0, separator + 1);
+    std::transform(
+        path.begin(),
+        path.end(),
+        path.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        }
+    );
+    return path == "explode_11.ogg";
+}
+
+static CCNode* createCompactSoundIcon(bool enabled) {
+    auto holder = CCNode::create();
+    holder->setContentSize({22.f, 22.f});
+    holder->setAnchorPoint({0.5f, 0.5f});
+    holder->ignoreAnchorPointForPosition(false);
+
+    auto sprite = CCSprite::createWithSpriteFrameName(
+        "edit_eSFXBtn_001.png"
+    );
+    if (sprite) {
+        auto const size = sprite->getContentSize();
+        if (size.width > 0.f && size.height > 0.f) {
+            sprite->setScale(std::min(20.f / size.width, 20.f / size.height));
+        }
+        sprite->setPosition({11.f, 11.f});
+        sprite->setOpacity(enabled ? 255 : 190);
+        holder->addChild(sprite);
+    }
+    return holder;
+}
+
+
 static bool isFlagHUDEnabled() {
     return Mod::get()->getSavedValue<bool>(
         SETTING_SHOW_FLAGS,
@@ -1562,6 +1863,19 @@ static matjson::Value sectionsToServerJson(
         object["difficulty"] = std::clamp(section.difficulty, 0, 999);
         object["partName"] = truncateUtf8(section.partName, 96);
         object["faces"] = std::clamp(section.faces, 0, 32);
+        auto const shareOverride =
+            section.deathSoundOverride &&
+            !section.deathSoundCustom &&
+            isGeometryDashDeathSound(section.deathSound);
+        object["deathSoundOverride"] = shareOverride;
+        object["deathSound"] = shareOverride
+            ? section.deathSound
+            : std::string("explode_11.ogg");
+        object["deathSoundVolume"] = std::clamp(
+            section.deathSoundVolume,
+            0.f,
+            1.f
+        );
         array.push(std::move(object));
     }
     return array;
@@ -1605,6 +1919,29 @@ static bool parseServerSectionArray(
         auto start = item["start"].asDouble().unwrapOr(-1.0);
         auto difficulty = item["difficulty"].asDouble().unwrapOr(-1.0);
         auto faces = item["faces"].asDouble().unwrapOr(-1.0);
+        auto const hasDeathOverride = item.contains("deathSoundOverride");
+        auto const hasDeathSound = item.contains("deathSound");
+        auto const hasDeathVolume = item.contains("deathSoundVolume");
+        if (
+            (hasDeathOverride && !item["deathSoundOverride"].isBool()) ||
+            (hasDeathSound && !item["deathSound"].isString()) ||
+            (hasDeathVolume && !item["deathSoundVolume"].isNumber())
+        ) {
+            error = fmt::format(
+                "SectionData item {} has an invalid death sound field.",
+                index
+            );
+            return false;
+        }
+        auto const deathSoundOverride = hasDeathOverride
+            ? item["deathSoundOverride"].asBool().unwrapOr(false)
+            : false;
+        auto const deathSound = hasDeathSound
+            ? item["deathSound"].asString().unwrapOr("explode_11.ogg")
+            : std::string("explode_11.ogg");
+        auto const deathSoundVolume = hasDeathVolume
+            ? item["deathSoundVolume"].asDouble().unwrapOr(1.0)
+            : 1.0;
         if (
             !std::isfinite(start) ||
             !std::isfinite(difficulty) ||
@@ -1613,7 +1950,11 @@ static bool parseServerSectionArray(
             difficulty < 0.0 || difficulty > 999.0 ||
             faces < 0.0 || faces > 32.0 ||
             std::floor(difficulty) != difficulty ||
-            std::floor(faces) != faces
+            std::floor(faces) != faces ||
+            deathSound.size() > 64 ||
+            !isGeometryDashDeathSound(deathSound) ||
+            !std::isfinite(deathSoundVolume) ||
+            deathSoundVolume < 0.0 || deathSoundVolume > 1.0
         ) {
             error = fmt::format(
                 "SectionData item {} has a value outside the allowed range.",
@@ -1630,7 +1971,11 @@ static bool parseServerSectionArray(
                 96
             ),
             static_cast<int>(faces),
-            ""
+            "",
+            deathSoundOverride,
+            deathSound,
+            false,
+            static_cast<float>(deathSoundVolume)
         };
         sections.push_back(std::move(section));
         index++;
@@ -1875,6 +2220,20 @@ protected:
 
         addMenu->addChild(addBtn);
 
+        auto graphMenu = CCMenu::create();
+        graphMenu->setPosition({35.f, 25.f});
+        m_mainLayer->addChild(graphMenu);
+
+        auto graphSprite = ButtonSprite::create("Graph");
+        graphSprite->setScale(0.52f);
+        auto graphButton = CCMenuItemSpriteExtra::create(
+            graphSprite,
+            this,
+            menu_selector(SectionListPopup::onOpenDifficultyGraph)
+        );
+        graphButton->setID("difficulty-graph-button"_spr);
+        graphMenu->addChild(graphButton);
+
         auto flagMenu = CCMenu::create();
         flagMenu->setPosition({210.f, 25.f});
         m_mainLayer->addChild(flagMenu);
@@ -1963,10 +2322,10 @@ protected:
         float y = contentHeight - 24.f;
 
         for (int i = 0; i < static_cast<int>(m_sections.size()); i++) {
-            auto startInput = TextInput::create(60.f, "Start");
+            auto startInput = TextInput::create(52.f, "Start");
             startInput->setString(fmt::format("{:.1f}", m_sections[i].startPercent));
             startInput->setScale(0.58f);
-            startInput->setPosition({38.f, y});
+            startInput->setPosition({28.f, y});
             startInput->setCommonFilter(CommonFilter::Float);
 
             startInput->setCallback([this, i](std::string const& str) {
@@ -1991,15 +2350,15 @@ protected:
             m_scroll->m_contentLayer->addChild(startInput);
 
             auto percentLabel = CCLabelBMFont::create("%", "bigFont.fnt");
-            percentLabel->setScale(0.35f);
+            percentLabel->setScale(0.3f);
             percentLabel->setAnchorPoint({0.f, 0.5f});
-            percentLabel->setPosition({72.f, y});
+            percentLabel->setPosition({47.f, y});
             m_scroll->m_contentLayer->addChild(percentLabel);
 
-            auto diffInput = TextInput::create(45.f, "Diff");
+            auto diffInput = TextInput::create(42.f, "0");
             diffInput->setString(fmt::format("{}", m_sections[i].difficulty));
             diffInput->setScale(0.58f);
-            diffInput->setPosition({115.f, y});
+            diffInput->setPosition({76.f, y});
             diffInput->setCommonFilter(CommonFilter::Uint);
 
             diffInput->setCallback([this, i](std::string const& str) {
@@ -2023,11 +2382,18 @@ protected:
 
             m_scroll->m_contentLayer->addChild(diffInput);
 
-            auto nameInput = TextInput::create(120.f, "Part");
+            auto diffLabel = CCLabelBMFont::create("Diff", "bigFont.fnt");
+            diffLabel->setScale(0.2f);
+            diffLabel->setAnchorPoint({0.f, 0.5f});
+            diffLabel->setColor(ccc3(190, 210, 195));
+            diffLabel->setPosition({92.f, y});
+            m_scroll->m_contentLayer->addChild(diffLabel);
+
+            auto nameInput = TextInput::create(220.f, "PartName");
             nameInput->setString(m_sections[i].partName);
             nameInput->setScale(0.58f);
             nameInput->setCommonFilter(CommonFilter::Any);
-            nameInput->setPosition({200.f, y});
+            nameInput->setPosition({194.f, y});
 
             nameInput->setCallback([this, i](std::string const& str) {
                 if (i >= 0 && i < static_cast<int>(m_sections.size())) {
@@ -2043,7 +2409,7 @@ protected:
             m_scroll->m_contentLayer->addChild(nameInput);
 
             auto faceMenu = CCMenu::create();
-            faceMenu->setPosition({300.f, y});
+            faceMenu->setPosition({286.f, y});
             m_scroll->m_contentLayer->addChild(faceMenu);
 
             int faceID = std::clamp(m_sections[i].faces, 0, 32);
@@ -2061,8 +2427,21 @@ protected:
             faceBtn->setPosition({0.f, 0.f});
             faceMenu->addChild(faceBtn);
 
+            auto soundMenu = CCMenu::create();
+            soundMenu->setPosition({314.f, y});
+            m_scroll->m_contentLayer->addChild(soundMenu);
+
+            auto soundButton = CCMenuItemSpriteExtra::create(
+                createCompactSoundIcon(m_sections[i].deathSoundOverride),
+                this,
+                menu_selector(SectionListPopup::onOpenDeathSound)
+            );
+            soundButton->setTag(i);
+            soundButton->setID(fmt::format("section-death-sound-{}", i));
+            soundMenu->addChild(soundButton);
+
             auto deleteMenu = CCMenu::create();
-            deleteMenu->setPosition({365.f, y});
+            deleteMenu->setPosition({390.f, y});
             m_scroll->m_contentLayer->addChild(deleteMenu);
 
             auto deleteSpr = ButtonSprite::create("X");
@@ -2141,7 +2520,11 @@ protected:
 
     void onOpenFlagData(CCObject*);
 
+    void onOpenDifficultyGraph(CCObject*);
+
     void onOpenFaceSelect(CCObject* sender);
+
+    void onOpenDeathSound(CCObject* sender);
 
 public:
     void setSectionControlsEnabled(bool enabled) {
@@ -2213,6 +2596,45 @@ public:
         }
     }
 
+    void setDeathSound(int index, SectionData const& updated) {
+        if (index < 0 || index >= static_cast<int>(m_sections.size())) {
+            return;
+        }
+
+        auto const previous = m_sections[index];
+        m_sections[index].deathSoundOverride = updated.deathSoundOverride;
+        m_sections[index].deathSound = updated.deathSound;
+        m_sections[index].deathSoundCustom = updated.deathSoundCustom;
+        m_sections[index].deathSoundVolume = std::clamp(
+            updated.deathSoundVolume,
+            0.f,
+            1.f
+        );
+        if (!persistSections(m_sections)) {
+            m_sections[index] = previous;
+        }
+    }
+
+    void removeCustomDeathSoundReferences(std::string const& path) {
+        auto const previous = m_sections;
+        bool changed = false;
+        for (auto& section : m_sections) {
+            if (section.deathSoundCustom && section.deathSound == path) {
+                section.deathSoundOverride = false;
+                section.deathSound = "explode_11.ogg";
+                section.deathSoundCustom = false;
+                changed = true;
+            }
+        }
+        if (changed && !persistSections(m_sections)) {
+            m_sections = previous;
+        }
+    }
+
+    void refreshSectionRows() {
+        reloadList(true);
+    }
+
     static SectionListPopup* create() {
         auto ret = new SectionListPopup();
 
@@ -2225,6 +2647,455 @@ public:
         return nullptr;
     }
 };
+
+class SectionDifficultyGraphPopup : public geode::Popup {
+protected:
+    WeakRef<SectionListPopup> m_parent;
+    std::vector<SectionData> m_sections;
+    std::vector<CCPoint> m_pointPositions;
+    CCNode* m_detailCard = nullptr;
+    int m_visibleIndex = -1;
+    int m_pinnedIndex = -1;
+
+    static constexpr float GRAPH_LEFT = 56.f;
+    static constexpr float GRAPH_BOTTOM = 52.f;
+    static constexpr float GRAPH_WIDTH = 372.f;
+    static constexpr float GRAPH_HEIGHT = 154.f;
+
+    static std::string difficultyText(int difficulty) {
+        return fmt::format("{:.1f}", difficulty / 10.f);
+    }
+
+    void hideDetails() {
+        if (m_detailCard) {
+            m_detailCard->removeFromParent();
+            m_detailCard = nullptr;
+        }
+        m_visibleIndex = -1;
+    }
+
+    void showDetails(int index) {
+        if (
+            index < 0 ||
+            index >= static_cast<int>(m_sections.size()) ||
+            index >= static_cast<int>(m_pointPositions.size())
+        ) {
+            return;
+        }
+        if (m_visibleIndex == index && m_detailCard) return;
+
+        hideDetails();
+        m_visibleIndex = index;
+
+        auto const& section = m_sections[index];
+        auto const point = m_pointPositions[index];
+        constexpr float cardWidth = 140.f;
+        constexpr float cardHeight = 48.f;
+        constexpr float cardPadding = 8.f;
+
+        float cardX = point.x + cardPadding;
+        if (cardX + cardWidth > 442.f) {
+            cardX = point.x - cardWidth - cardPadding;
+        }
+        cardX = std::clamp(cardX, 8.f, 442.f - cardWidth);
+
+        float cardY = point.y + cardPadding;
+        if (cardY + cardHeight > 222.f) {
+            cardY = point.y - cardHeight - cardPadding;
+        }
+        cardY = std::clamp(cardY, 40.f, 222.f - cardHeight);
+
+        m_detailCard = CCNode::create();
+        m_detailCard->setPosition({cardX, cardY});
+        m_detailCard->setZOrder(100);
+        m_mainLayer->addChild(m_detailCard);
+
+        auto background = CCLayerColor::create(
+            ccc4(0, 0, 0, 245),
+            cardWidth,
+            cardHeight
+        );
+        m_detailCard->addChild(background);
+
+        auto border = CCDrawNode::create();
+        auto const green = ccc4f(0.f, 1.f, 0.f, 1.f);
+        border->drawSegment({0.f, 0.f}, {cardWidth, 0.f}, 0.6f, green);
+        border->drawSegment(
+            {cardWidth, 0.f},
+            {cardWidth, cardHeight},
+            0.6f,
+            green
+        );
+        border->drawSegment(
+            {cardWidth, cardHeight},
+            {0.f, cardHeight},
+            0.6f,
+            green
+        );
+        border->drawSegment({0.f, cardHeight}, {0.f, 0.f}, 0.6f, green);
+        m_detailCard->addChild(border);
+
+        auto face = createFaceSprite(
+            std::clamp(section.faces, 0, 32),
+            section.customImage
+        );
+        if (face) {
+            scaleFaceToReference(face, 0.22f);
+            face->setPosition({20.f, 24.f});
+            m_detailCard->addChild(face);
+        }
+
+        auto const partName = section.partName.empty()
+            ? fmt::format("Part {}", index + 1)
+            : section.partName;
+        auto partLabel = CCLabelBMFont::create(
+            partName.c_str(),
+            "bigFont.fnt"
+        );
+        partLabel->setAnchorPoint({0.f, 0.5f});
+        partLabel->setScale(0.28f);
+        partLabel->limitLabelWidth(92.f, 0.28f, 0.17f);
+        partLabel->setPosition({40.f, 33.f});
+        partLabel->setColor(ccc3(225, 255, 232));
+        m_detailCard->addChild(partLabel);
+
+        auto detailLabel = CCLabelBMFont::create(
+            fmt::format(
+                "Difficulty {}  |  {:.1f}%",
+                difficultyText(section.difficulty),
+                section.startPercent
+            ).c_str(),
+            "bigFont.fnt"
+        );
+        detailLabel->setAnchorPoint({0.f, 0.5f});
+        detailLabel->setScale(0.18f);
+        detailLabel->setColor(ccc3(0, 255, 0));
+        detailLabel->setPosition({40.f, 14.f});
+        m_detailCard->addChild(detailLabel);
+    }
+
+    void onGraphBackgroundPressed(CCObject*) {
+        m_pinnedIndex = -1;
+        hideDetails();
+    }
+
+    void onPointPressed(CCObject* sender) {
+        auto const index = static_cast<CCNode*>(sender)->getTag();
+        m_pinnedIndex = index;
+        showDetails(index);
+    }
+
+    void handleMouseMove(int32_t x, int32_t y) {
+        if (!this->isRunning() || !m_mainLayer) return;
+
+        auto const world = CCDirector::sharedDirector()->convertToGL({
+            static_cast<float>(x),
+            static_cast<float>(y)
+        });
+        auto const local = m_mainLayer->convertToNodeSpace(world);
+
+        int hoveredIndex = -1;
+        float closestDistanceSquared = 12.f * 12.f;
+        for (int index = 0; index < static_cast<int>(m_pointPositions.size()); ++index) {
+            auto const delta = local - m_pointPositions[index];
+            auto const distanceSquared = delta.x * delta.x + delta.y * delta.y;
+            if (distanceSquared <= closestDistanceSquared) {
+                closestDistanceSquared = distanceSquared;
+                hoveredIndex = index;
+            }
+        }
+
+        if (hoveredIndex >= 0) {
+            showDetails(hoveredIndex);
+        }
+        else if (m_pinnedIndex >= 0) {
+            showDetails(m_pinnedIndex);
+        }
+        else {
+            hideDetails();
+        }
+    }
+
+    void addAxisLabel(
+        std::string const& text,
+        CCPoint const& position,
+        float scale = 0.22f
+    ) {
+        auto label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
+        label->setScale(scale);
+        label->setColor(ccc3(145, 173, 157));
+        label->setPosition(position);
+        m_mainLayer->addChild(label);
+    }
+
+    bool init(
+        SectionListPopup* parent,
+        std::vector<SectionData> sections
+    ) {
+        if (!Popup::init(450.f, 275.f)) return false;
+
+        m_parent = parent;
+        m_sections = std::move(sections);
+        sortSections(m_sections);
+        this->setID("section-difficulty-graph-popup"_spr);
+        this->setTitle("Difficulty Graph");
+
+        auto graphBackground = CCLayerColor::create(
+            ccc4(0, 0, 0, 255),
+            GRAPH_WIDTH,
+            GRAPH_HEIGHT
+        );
+        graphBackground->setPosition({GRAPH_LEFT, GRAPH_BOTTOM});
+        m_mainLayer->addChild(graphBackground);
+
+        auto grid = CCDrawNode::create();
+        auto const gridColor = ccc4f(0.18f, 0.34f, 0.25f, 0.55f);
+        auto const axisColor = ccc4f(0.47f, 0.68f, 0.54f, 0.9f);
+        for (int step = 0; step <= 4; ++step) {
+            auto const xPos = GRAPH_LEFT + GRAPH_WIDTH * step / 4.f;
+            grid->drawSegment(
+                {xPos, GRAPH_BOTTOM},
+                {xPos, GRAPH_BOTTOM + GRAPH_HEIGHT},
+                step == 0 ? 0.9f : 0.45f,
+                step == 0 ? axisColor : gridColor
+            );
+            addAxisLabel(
+                fmt::format("{}", step * 25),
+                {xPos, GRAPH_BOTTOM - 10.f}
+            );
+        }
+        for (int step = 0; step <= 4; ++step) {
+            auto const yPos = GRAPH_BOTTOM + GRAPH_HEIGHT * step / 4.f;
+            grid->drawSegment(
+                {GRAPH_LEFT, yPos},
+                {GRAPH_LEFT + GRAPH_WIDTH, yPos},
+                step == 0 ? 0.9f : 0.45f,
+                step == 0 ? axisColor : gridColor
+            );
+        }
+        m_mainLayer->addChild(grid);
+
+        auto xTitle = CCLabelBMFont::create("Progress (%)", "bigFont.fnt");
+        xTitle->setScale(0.27f);
+        xTitle->setColor(ccc3(180, 205, 188));
+        xTitle->setPosition({GRAPH_LEFT + GRAPH_WIDTH / 2.f, 24.f});
+        m_mainLayer->addChild(xTitle);
+
+        auto yTitle = CCLabelBMFont::create("Difficulty", "bigFont.fnt");
+        yTitle->setScale(0.27f);
+        yTitle->setRotation(-90.f);
+        yTitle->setColor(ccc3(180, 205, 188));
+        yTitle->setPosition({12.f, GRAPH_BOTTOM + GRAPH_HEIGHT / 2.f});
+        m_mainLayer->addChild(yTitle);
+
+        if (m_sections.empty()) {
+            auto emptyLabel = CCLabelBMFont::create(
+                "No SectionData yet.",
+                "bigFont.fnt"
+            );
+            emptyLabel->setScale(0.42f);
+            emptyLabel->setColor(ccc3(128, 180, 145));
+            emptyLabel->setPosition({
+                GRAPH_LEFT + GRAPH_WIDTH / 2.f,
+                GRAPH_BOTTOM + GRAPH_HEIGHT / 2.f
+            });
+            m_mainLayer->addChild(emptyLabel);
+            return true;
+        }
+
+        auto [minimumIt, maximumIt] = std::minmax_element(
+            m_sections.begin(),
+            m_sections.end(),
+            [](SectionData const& left, SectionData const& right) {
+                return left.difficulty < right.difficulty;
+            }
+        );
+        auto const minimumDifficulty = minimumIt->difficulty;
+        auto const maximumDifficulty = maximumIt->difficulty;
+        auto const difficultySpan = maximumDifficulty - minimumDifficulty;
+
+        if (difficultySpan == 0) {
+            addAxisLabel(
+                difficultyText(minimumDifficulty),
+                {GRAPH_LEFT - 14.f, GRAPH_BOTTOM + GRAPH_HEIGHT / 2.f}
+            );
+        }
+        else {
+            addAxisLabel(
+                difficultyText(minimumDifficulty),
+                {GRAPH_LEFT - 14.f, GRAPH_BOTTOM}
+            );
+            addAxisLabel(
+                difficultyText(minimumDifficulty + difficultySpan / 2),
+                {GRAPH_LEFT - 14.f, GRAPH_BOTTOM + GRAPH_HEIGHT / 2.f}
+            );
+            addAxisLabel(
+                difficultyText(maximumDifficulty),
+                {GRAPH_LEFT - 14.f, GRAPH_BOTTOM + GRAPH_HEIGHT}
+            );
+        }
+
+        m_pointPositions.reserve(m_sections.size());
+        for (auto const& section : m_sections) {
+            auto const xRatio = clampLevelPercent(section.startPercent) / 100.f;
+            auto const yRatio = difficultySpan == 0
+                ? 0.5f
+                : static_cast<float>(section.difficulty - minimumDifficulty) /
+                    static_cast<float>(difficultySpan);
+            m_pointPositions.push_back({
+                GRAPH_LEFT + GRAPH_WIDTH * xRatio,
+                GRAPH_BOTTOM + GRAPH_HEIGHT * yRatio
+            });
+        }
+
+        auto line = CCDrawNode::create();
+        auto const lineGreen = ccc4f(0.f, 1.f, 0.f, 1.f);
+        for (size_t index = 1; index < m_pointPositions.size(); ++index) {
+            line->drawSegment(
+                m_pointPositions[index - 1],
+                m_pointPositions[index],
+                0.7f,
+                lineGreen
+            );
+        }
+        m_mainLayer->addChild(line);
+
+        auto pointMenu = CCMenu::create();
+        pointMenu->setPosition({0.f, 0.f});
+        pointMenu->setZOrder(10);
+        m_mainLayer->addChild(pointMenu);
+
+        auto addDismissRegion = [this, pointMenu](
+            float left,
+            float right,
+            float bottom,
+            float top
+        ) {
+            if (right - left < 1.f || top - bottom < 1.f) return;
+            auto hitArea = CCLayerColor::create(
+                ccc4(0, 0, 0, 0),
+                right - left,
+                top - bottom
+            );
+            hitArea->setAnchorPoint({0.5f, 0.5f});
+            hitArea->ignoreAnchorPointForPosition(false);
+            auto button = CCMenuItemSpriteExtra::create(
+                hitArea,
+                this,
+                menu_selector(
+                    SectionDifficultyGraphPopup::onGraphBackgroundPressed
+                )
+            );
+            button->setPosition({
+                (left + right) / 2.f,
+                (bottom + top) / 2.f
+            });
+            pointMenu->addChild(button);
+        };
+
+        // The dismiss surface is split into strips with holes around points.
+        // This keeps background taps from stealing the point buttons' touches.
+        constexpr float rowHeight = 14.f;
+        constexpr float pointHoleRadius = 11.f;
+        for (
+            float rowBottom = GRAPH_BOTTOM;
+            rowBottom < GRAPH_BOTTOM + GRAPH_HEIGHT;
+            rowBottom += rowHeight
+        ) {
+            auto const rowTop = std::min(
+                rowBottom + rowHeight,
+                GRAPH_BOTTOM + GRAPH_HEIGHT
+            );
+            std::vector<std::pair<float, float>> blocked;
+            for (auto const& point : m_pointPositions) {
+                if (
+                    point.y + pointHoleRadius <= rowBottom ||
+                    point.y - pointHoleRadius >= rowTop
+                ) continue;
+                blocked.push_back({
+                    std::max(GRAPH_LEFT, point.x - pointHoleRadius),
+                    std::min(
+                        GRAPH_LEFT + GRAPH_WIDTH,
+                        point.x + pointHoleRadius
+                    )
+                });
+            }
+            std::sort(blocked.begin(), blocked.end());
+
+            float cursor = GRAPH_LEFT;
+            for (auto const& interval : blocked) {
+                if (interval.first > cursor) {
+                    addDismissRegion(
+                        cursor,
+                        interval.first,
+                        rowBottom,
+                        rowTop
+                    );
+                }
+                cursor = std::max(cursor, interval.second);
+            }
+            addDismissRegion(
+                cursor,
+                GRAPH_LEFT + GRAPH_WIDTH,
+                rowBottom,
+                rowTop
+            );
+        }
+
+        for (int index = 0; index < static_cast<int>(m_pointPositions.size()); ++index) {
+            auto pointVisual = CCDrawNode::create();
+            pointVisual->setContentSize({22.f, 22.f});
+            pointVisual->setAnchorPoint({0.5f, 0.5f});
+            pointVisual->drawDot({11.f, 11.f}, 3.5f, lineGreen);
+
+            auto pointButton = CCMenuItemSpriteExtra::create(
+                pointVisual,
+                this,
+                menu_selector(SectionDifficultyGraphPopup::onPointPressed)
+            );
+            pointButton->setTag(index);
+            pointButton->setPosition(m_pointPositions[index]);
+            pointButton->setID(fmt::format("difficulty-point-{}", index));
+            pointMenu->addChild(pointButton);
+        }
+
+        this->addEventListener(
+            MouseMoveEvent(),
+            [this](int32_t x, int32_t y) {
+                handleMouseMove(x, y);
+            }
+        );
+        return true;
+    }
+
+public:
+    void onClose(CCObject* sender) override {
+        if (auto parent = m_parent.lock()) {
+            parent->setSectionControlsEnabled(true);
+        }
+        Popup::onClose(sender);
+    }
+
+    static SectionDifficultyGraphPopup* create(
+        SectionListPopup* parent,
+        std::vector<SectionData> sections
+    ) {
+        auto ret = new SectionDifficultyGraphPopup();
+        if (ret && ret->init(parent, std::move(sections))) {
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+};
+
+void SectionListPopup::onOpenDifficultyGraph(CCObject*) {
+    if (auto popup = SectionDifficultyGraphPopup::create(this, m_sections)) {
+        setSectionControlsEnabled(false);
+        popup->show();
+    }
+}
 
 // Local SectionData browser
 
@@ -3078,6 +3949,8 @@ public:
 };
 
 // Implement functions that depend on FaceSelectPopup after its definition.
+
+#include "DeathSoundPopup.inl"
 
 void SectionListPopup::onOpenFaceSelect(CCObject* sender) {
     int index = static_cast<CCNode*>(sender)->getTag();
@@ -5550,6 +6423,105 @@ class $modify(ProcessDifficultyPauseLayer, PauseLayer) {
 
 };
 
+class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
+    int playEffect(gd::string path) {
+        if (
+            s_activeDeathSoundOverride.enabled &&
+            isDefaultDeathSound(path)
+        ) {
+            if (s_activeDeathSoundOverride.volume <= 0.f) return -1;
+            return FMODAudioEngine::playEffect(
+                gd::string(s_activeDeathSoundOverride.path),
+                1.f,
+                0.f,
+                s_activeDeathSoundOverride.volume
+            );
+        }
+        return FMODAudioEngine::playEffect(path);
+    }
+
+    int playEffect(
+        gd::string path,
+        float speed,
+        float unknown,
+        float volume
+    ) {
+        if (
+            s_activeDeathSoundOverride.enabled &&
+            isDefaultDeathSound(path)
+        ) {
+            if (s_activeDeathSoundOverride.volume <= 0.f) return -1;
+            return FMODAudioEngine::playEffect(
+                gd::string(s_activeDeathSoundOverride.path),
+                speed,
+                unknown,
+                std::clamp(
+                    volume * s_activeDeathSoundOverride.volume,
+                    0.f,
+                    1.f
+                )
+            );
+        }
+        return FMODAudioEngine::playEffect(path, speed, unknown, volume);
+    }
+
+    int playEffectAdvanced(
+        gd::string path,
+        float speed,
+        float unknown,
+        float volume,
+        float pitch,
+        bool fastFourierTransform,
+        bool reverb,
+        int startMillis,
+        int endMillis,
+        int fadeIn,
+        int fadeOut,
+        bool loopEnabled,
+        int effectID,
+        bool override,
+        bool noPreload,
+        int channelID,
+        int uniqueID,
+        float minInterval,
+        int sfxGroup
+    ) {
+        if (
+            s_activeDeathSoundOverride.enabled &&
+            isDefaultDeathSound(path)
+        ) {
+            if (s_activeDeathSoundOverride.volume <= 0.f) return -1;
+            path = gd::string(s_activeDeathSoundOverride.path);
+            volume = std::clamp(
+                volume * s_activeDeathSoundOverride.volume,
+                0.f,
+                1.f
+            );
+        }
+        return FMODAudioEngine::playEffectAdvanced(
+            path,
+            speed,
+            unknown,
+            volume,
+            pitch,
+            fastFourierTransform,
+            reverb,
+            startMillis,
+            endMillis,
+            fadeIn,
+            fadeOut,
+            loopEnabled,
+            effectID,
+            override,
+            noPreload,
+            channelID,
+            uniqueID,
+            minInterval,
+            sfxGroup
+        );
+    }
+};
+
 class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
@@ -5568,5 +6540,12 @@ class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
         }
 
         return true;
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        auto const previousOverride = s_activeDeathSoundOverride;
+        s_activeDeathSoundOverride = deathSoundForCurrentSection(this);
+        PlayLayer::destroyPlayer(player, object);
+        s_activeDeathSoundOverride = previousOverride;
     }
 };
