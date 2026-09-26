@@ -78,14 +78,6 @@ struct SectionData {
     std::string customImage;
 };
 
-struct DeathSoundSettings {
-    bool enabled = false;
-    float minimumPercent = 0.f;
-    std::string sound = "explode_11.ogg";
-    bool custom = false;
-    float volume = 1.f;
-};
-
 enum class FlagPercentSource {
     Fixed,
     PersonalBest,
@@ -128,7 +120,6 @@ class DownloadMenu;
 class ServerMapListPopup;
 class MyDataListPopup;
 class SectionDifficultyGraphPopup;
-class DeathSoundPopup;
 
 static void setPopupControlsEnabled(CCNode* node, bool enabled) {
     if (!node) return;
@@ -979,6 +970,7 @@ static CCSprite* createFaceSprite(int faceID, std::string const& customImage = "
 }
 
 
+#if 0 // Death-sound configuration is not available in the Free edition.
 static constexpr char const* CUSTOM_DEATH_SOUNDS_KEY =
     "difficulty-custom-death-sounds";
 
@@ -1040,6 +1032,82 @@ static std::vector<DeathSoundOption> geometryDashDeathSounds() {
         }
     }
     return options;
+}
+
+static bool isDeathSoundAudioFile(std::filesystem::path const& path) {
+    auto extension = path.extension().string();
+    std::transform(
+        extension.begin(),
+        extension.end(),
+        extension.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        }
+    );
+    return extension == ".wav" || extension == ".mp3";
+}
+
+static std::vector<DeathSoundOption> presetDeathSounds() {
+    std::vector<DeathSoundOption> sounds;
+    std::vector<std::filesystem::path> directories = {
+        Mod::get()->getResourcesDir() / "preset",
+        Mod::get()->getResourcesDir(),
+        Mod::get()->getSaveDir() / "preset",
+    };
+
+    std::error_code error;
+    std::filesystem::create_directories(directories.back(), error);
+
+    for (auto const& directory : directories) {
+        error.clear();
+        if (!std::filesystem::is_directory(directory, error) || error) continue;
+
+        std::filesystem::directory_iterator iterator(
+            directory,
+            std::filesystem::directory_options::skip_permission_denied,
+            error
+        );
+        auto const end = std::filesystem::directory_iterator();
+        while (!error && iterator != end) {
+            auto const path = iterator->path();
+            std::error_code fileError;
+            if (
+                iterator->is_regular_file(fileError) &&
+                !fileError &&
+                isDeathSoundAudioFile(path)
+            ) {
+                auto normalized = path.lexically_normal().string();
+                auto duplicate = std::any_of(
+                    sounds.begin(),
+                    sounds.end(),
+                    [&normalized](DeathSoundOption const& sound) {
+                        return sound.path == normalized;
+                    }
+                );
+                if (!duplicate) {
+                    sounds.push_back({path.filename().string(), normalized});
+                }
+            }
+            iterator.increment(error);
+        }
+    }
+
+    std::sort(
+        sounds.begin(),
+        sounds.end(),
+        [](DeathSoundOption const& left, DeathSoundOption const& right) {
+            auto leftName = left.label;
+            auto rightName = right.label;
+            std::transform(leftName.begin(), leftName.end(), leftName.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            std::transform(rightName.begin(), rightName.end(), rightName.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return leftName < rightName;
+        }
+    );
+    return sounds;
 }
 
 static bool isGeometryDashDeathSound(std::string const& path) {
@@ -1122,6 +1190,15 @@ static DeathSoundSettings loadDeathSoundSettingsForSectionKey(
         "explode_11.ogg"
     );
     settings.custom = value["custom"].asBool().unwrapOr(false);
+    auto const savedCategory = static_cast<int>(
+        value["category"].asInt().unwrapOr(settings.custom ? 2 : 0)
+    );
+    settings.category = static_cast<DeathSoundCategory>(std::clamp(
+        savedCategory,
+        static_cast<int>(DeathSoundCategory::GeometryDash),
+        static_cast<int>(DeathSoundCategory::Custom)
+    ));
+    settings.custom = settings.category != DeathSoundCategory::GeometryDash;
     settings.volume = static_cast<float>(std::clamp(
         value["volume"].asDouble().unwrapOr(1.0),
         0.0,
@@ -1148,6 +1225,7 @@ static void saveDeathSoundSettingsForSectionKey(
     );
     value["sound"] = settings.sound;
     value["custom"] = settings.custom;
+    value["category"] = static_cast<int>(settings.category);
     value["volume"] = std::clamp(settings.volume, 0.f, 1.f);
     saved[key] = std::move(value);
 }
@@ -1252,6 +1330,7 @@ static CCNode* createDeathSoundButtonIcon(bool enabled) {
     sprite->setOpacity(enabled ? 255 : 205);
     return sprite;
 }
+#endif
 
 
 static bool isFlagHUDEnabled() {
@@ -2151,7 +2230,7 @@ protected:
 
         // Add button
         auto addMenu = CCMenu::create();
-        addMenu->setPosition({95.f, 25.f});
+        addMenu->setPosition({35.f, 25.f});
         m_mainLayer->addChild(addMenu);
 
         auto addSpr = ButtonSprite::create("Add");
@@ -2166,11 +2245,11 @@ protected:
         addMenu->addChild(addBtn);
 
         auto graphMenu = CCMenu::create();
-        graphMenu->setPosition({35.f, 25.f});
+        graphMenu->setPosition({167.f, 25.f});
         m_mainLayer->addChild(graphMenu);
 
         auto graphSprite = ButtonSprite::create("Graph");
-        graphSprite->setScale(0.52f);
+        graphSprite->setScale(0.38f);
         auto graphButton = CCMenuItemSpriteExtra::create(
             graphSprite,
             this,
@@ -2198,22 +2277,9 @@ protected:
         flagButton->setID("flag-data-button"_spr);
         flagMenu->addChild(flagButton);
 
-        auto deathSoundMenu = CCMenu::create();
-        deathSoundMenu->setPosition({260.f, 25.f});
-        m_mainLayer->addChild(deathSoundMenu);
-
-        auto const deathSoundSettings = loadDeathSoundSettings();
-        auto deathSoundButton = CCMenuItemSpriteExtra::create(
-            createDeathSoundButtonIcon(deathSoundSettings.enabled),
-            this,
-            menu_selector(SectionListPopup::onOpenDeathSound)
-        );
-        deathSoundButton->setID("death-sound-settings-button"_spr);
-        deathSoundMenu->addChild(deathSoundButton);
-
         // Opens the per-map Firebase upload/download browser.
         auto serverMenu = CCMenu::create();
-        serverMenu->setPosition({340.f, 25.f});
+        serverMenu->setPosition({350.f, 25.f});
         m_mainLayer->addChild(serverMenu);
 
         auto serverSprite = ButtonSprite::create("Server Download");
@@ -2469,8 +2535,6 @@ protected:
 
     void onOpenFaceSelect(CCObject* sender);
 
-    void onOpenDeathSound(CCObject*);
-
 public:
     void setSectionControlsEnabled(bool enabled) {
         this->setTouchEnabled(enabled);
@@ -2538,20 +2602,6 @@ public:
                 m_sections = loadSections();
             }
             reloadList(true);
-        }
-    }
-
-    void setDeathSoundSettings(DeathSoundSettings const& settings) {
-        saveDeathSoundSettings(settings);
-    }
-
-    void removeCustomDeathSoundReferences(std::string const& path) {
-        auto settings = loadDeathSoundSettings();
-        if (settings.custom && settings.sound == path) {
-            settings.enabled = false;
-            settings.sound = "explode_11.ogg";
-            settings.custom = false;
-            saveDeathSoundSettings(settings);
         }
     }
 
@@ -3280,7 +3330,6 @@ protected:
         auto targetKey = getSectionKeyForMapName(targetName);
         auto sections = loadSectionsForKey(sourceKey);
         auto flags = loadFlagsForSectionKey(sourceKey);
-        auto deathSound = loadDeathSoundSettingsForSectionKey(sourceKey);
         if (sections.empty() && flags.empty()) {
             showError("The source data no longer exists.");
             reloadList(true);
@@ -3301,14 +3350,12 @@ protected:
             return false;
         }
         saveFlagsForSectionKey(targetKey, flags);
-        saveDeathSoundSettingsForSectionKey(targetKey, deathSound);
         setSectionMapDisplayName(targetKey, targetName);
 
         if (!keepSource) {
             saved.erase(sourceKey);
             removeSectionMapDisplayName(sourceKey);
             removeFlagsForSectionKey(sourceKey);
-            removeDeathSoundSettingsForSectionKey(sourceKey);
         }
 
         syncAfterMutation(
@@ -3334,7 +3381,6 @@ protected:
 
         auto sections = loadSectionsForKey(sourceKey);
         auto flags = loadFlagsForSectionKey(sourceKey);
-        auto deathSound = loadDeathSoundSettingsForSectionKey(sourceKey);
         if (sections.empty() && flags.empty()) {
             showError("The source data no longer exists.");
             reloadList(true);
@@ -3349,7 +3395,6 @@ protected:
             return false;
         }
         saveFlagsForSectionKey(targetKey, flags);
-        saveDeathSoundSettingsForSectionKey(targetKey, deathSound);
         setSectionMapDisplayName(targetKey, targetName);
         syncAfterMutation("", targetKey, sections, flags);
         reloadList(true);
@@ -3382,7 +3427,6 @@ protected:
         if (saved.isObject()) saved.erase(sectionKey);
         removeSectionMapDisplayName(sectionKey);
         removeFlagsForSectionKey(sectionKey);
-        removeDeathSoundSettingsForSectionKey(sectionKey);
         syncAfterMutation(sectionKey, "", {}, {});
         reloadList(true);
     }
@@ -3879,8 +3923,6 @@ public:
 };
 
 // Implement functions that depend on FaceSelectPopup after its definition.
-
-#include "DeathSoundPopup.inl"
 
 void SectionListPopup::onOpenFaceSelect(CCObject* sender) {
     int index = static_cast<CCNode*>(sender)->getTag();
@@ -6353,6 +6395,7 @@ class $modify(ProcessDifficultyPauseLayer, PauseLayer) {
 
 };
 
+#if 0 // Death-sound replacement is disabled in the Free edition.
 class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
     int playEffect(gd::string path) {
         if (
@@ -6507,6 +6550,7 @@ class $modify(ProcessDifficultyAudioEngine, FMODAudioEngine) {
         );
     }
 };
+#endif
 
 class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
@@ -6528,11 +6572,4 @@ class $modify(ProcessDifficultyPlayLayer, PlayLayer) {
         return true;
     }
 
-    void destroyPlayer(PlayerObject* player, GameObject* object) {
-        auto const previousOverride = s_activeDeathSoundOverride;
-        auto const deathSound = deathSoundForCurrentMap(this);
-        s_activeDeathSoundOverride = deathSound;
-        PlayLayer::destroyPlayer(player, object);
-        s_activeDeathSoundOverride = previousOverride;
-    }
 };

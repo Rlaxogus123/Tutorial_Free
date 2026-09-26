@@ -1,3 +1,10 @@
+# 1.3.3
+
+- Rework death sound settings into a compact three-category layout.
+- Replace page navigation with one virtualized scrolling sound list.
+- Add packaged and local preset folder support for WAV and MP3 files.
+- Reposition the Sections popup controls and reduce list press scaling.
+
 # 1.3.2
 
 - Replace the default death sound exactly once without forced duplicate playback.
